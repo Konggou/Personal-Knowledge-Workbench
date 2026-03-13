@@ -312,3 +312,22 @@
 - Self-RAG
 - RL 增强 RAG
 - 完整多模态 RAG
+## 10. V2.2 First Slice - Structured Chunking
+
+- Scope completed in this slice:
+  - structured chunk metadata added to `source_chunks`
+  - DOCX ingestion now preserves heading / paragraph / table-row / field structure
+  - PDF ingestion now applies lightweight heading and field detection before chunk assembly
+  - retrieval scoring now considers `section_type`, `heading_path`, `field_label`, and `table_origin`
+  - source preview now exposes structured chunk metadata for backend/frontend use
+- Metadata added for this slice:
+  - `section_type`
+  - `heading_path`
+  - `field_label`
+  - `table_origin`
+  - `proposition_type` (reserved for later proposition-level work)
+- Still deferred inside V2.2:
+  - proposition chunk generation
+  - richer hierarchical retrieval over chapter summaries
+  - stronger PDF layout reconstruction
+  - schema-preserving migrations for old local state

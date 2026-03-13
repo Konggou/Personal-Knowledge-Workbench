@@ -51,6 +51,29 @@ def _build_docx_bytes(*, paragraphs: list[str] | None = None, table_rows: list[l
     return buffer.getvalue()
 
 
+def _build_structured_docx_bytes(
+    *,
+    headings: list[str] | None = None,
+    paragraphs: list[str] | None = None,
+    table_rows: list[list[str]] | None = None,
+) -> bytes:
+    document = Document()
+    for heading in headings or []:
+        document.add_heading(heading, level=1)
+    for paragraph in paragraphs or []:
+        document.add_paragraph(paragraph)
+
+    if table_rows:
+        table = document.add_table(rows=len(table_rows), cols=len(table_rows[0]))
+        for row_index, row in enumerate(table_rows):
+            for col_index, value in enumerate(row):
+                table.cell(row_index, col_index).text = value
+
+    buffer = BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
 def test_project_session_chat_summary_and_report_flow(client, html_server):
     project = _create_project(client, name="会话主链项目")
 
@@ -333,3 +356,86 @@ def test_natural_chinese_title_question_can_fall_back_to_lexical_aliases(client,
     assert results
     assert results[0]["source_title"] == "开题报告-刘艺.docx"
     assert any("基于STM32的室内空气质量检测与智能控制系统设计" in item["normalized_text"] for item in results)
+
+def test_docx_preview_exposes_structured_chunk_metadata(client):
+    project = _create_project(client, name="Structured Chunk Preview")
+
+    docx_content = _build_structured_docx_bytes(
+        headings=["研究内容"],
+        paragraphs=["系统需要覆盖空气质量采集、显示与报警。"],
+        table_rows=[
+            ["课题名称", "基于STM32的室内空气质量检测与智能控制系统设计"],
+            ["预期成果", "完成硬件系统、控制程序与论文"],
+        ],
+    )
+
+    upload_response = client.post(
+        f"/api/v1/projects/{project['id']}/sources/files",
+        files=[
+            (
+                "files",
+                (
+                    "structured-preview.docx",
+                    docx_content,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ),
+            )
+        ],
+    )
+    assert upload_response.status_code == 201, upload_response.text
+    source = upload_response.json()["items"][0]
+
+    preview_response = client.get(f"/api/v1/sources/{source['id']}")
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()["item"]
+
+    preview_chunks = preview["preview_chunks"]
+    assert any(chunk["section_type"] == "heading" for chunk in preview_chunks)
+    assert any(chunk["field_label"] == "课题名称" for chunk in preview_chunks)
+    assert any(chunk["heading_path"] == "研究内容" for chunk in preview_chunks if chunk["section_type"] == "body")
+    assert any(chunk["table_origin"] == "table_row_1" for chunk in preview_chunks if chunk["field_label"] == "课题名称")
+
+
+def test_field_chunks_are_ranked_ahead_of_plain_body_hits_for_field_queries(client, monkeypatch):
+    project = _create_project(client, name="Field Weighted Retrieval")
+
+    docx_content = _build_structured_docx_bytes(
+        headings=["研究内容"],
+        paragraphs=[
+            "这个系统围绕室内空气质量检测与智能控制展开。",
+            "正文里也会提到课题名称和整体设计方向。",
+        ],
+        table_rows=[
+            ["课题名称", "基于STM32的室内空气质量检测与智能控制系统设计"],
+            ["研究内容", "完成采集、控制、显示与报警模块设计"],
+        ],
+    )
+
+    upload_response = client.post(
+        f"/api/v1/projects/{project['id']}/sources/files",
+        files=[
+            (
+                "files",
+                (
+                    "field-weighted.docx",
+                    docx_content,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ),
+            )
+        ],
+    )
+    assert upload_response.status_code == 201, upload_response.text
+
+    monkeypatch.setattr("app.services.vector_store.VectorStore.search", lambda self, *, query, project_id, limit: [])
+
+    results = SearchService().retrieve_project_evidence(
+        project["id"],
+        "我的课题名称是什么",
+        limit=3,
+        apply_rerank=False,
+    )
+
+    assert results
+    assert results[0]["section_type"] == "field"
+    assert results[0]["field_label"] == "课题名称"
+    assert "基于STM32的室内空气质量检测与智能控制系统设计" in results[0]["normalized_text"]

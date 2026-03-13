@@ -62,6 +62,18 @@ FIELD_LABEL_HINTS = (
     "\u7ed3\u8bba",
     "\u5efa\u8bae",
 )
+FIELD_QUERY_GROUPS = {
+    "\u9898\u76ee": ("\u9898\u76ee", "\u6807\u9898", "\u8bfe\u9898", "\u8bfe\u9898\u540d\u79f0", "\u9879\u76ee\u540d\u79f0"),
+    "\u6807\u9898": ("\u9898\u76ee", "\u6807\u9898", "\u8bfe\u9898", "\u8bfe\u9898\u540d\u79f0", "\u9879\u76ee\u540d\u79f0"),
+    "\u9879\u76ee": ("\u9879\u76ee", "\u9879\u76ee\u540d\u79f0", "\u8bfe\u9898", "\u8bfe\u9898\u540d\u79f0", "\u9898\u76ee"),
+    "\u7814\u7a76\u5185\u5bb9": ("\u7814\u7a76\u5185\u5bb9",),
+    "\u521b\u65b0\u70b9": ("\u521b\u65b0\u70b9",),
+    "\u9884\u671f\u6210\u679c": ("\u9884\u671f\u6210\u679c",),
+    "\u7ed3\u8bba": ("\u7ed3\u8bba",),
+    "\u5efa\u8bae": ("\u5efa\u8bae", "\u4f18\u5316", "\u6539\u8fdb"),
+    "\u4f18\u5316": ("\u5efa\u8bae", "\u4f18\u5316", "\u6539\u8fdb"),
+    "\u6539\u8fdb": ("\u5efa\u8bae", "\u4f18\u5316", "\u6539\u8fdb"),
+}
 FOLLOW_UP_QUERY_TERMS = {
     "\u73b0\u5728",
     "\u8fd9\u4e2a",
@@ -218,20 +230,39 @@ class SearchService:
 
     def _score_chunks(self, *, chunks: list[dict], query: str, limit: int) -> list[dict]:
         terms = self.repository.build_query_terms(query)
+        query_seeks_field_answer = self._query_seeks_field_answer(query)
 
         scored: list[dict] = []
         for chunk in chunks:
-            haystack = f"{chunk['source_title']} {chunk['normalized_text']}".lower()
+            metadata_haystack = " ".join(
+                value
+                for value in (
+                    chunk["source_title"],
+                    chunk.get("section_label"),
+                    chunk.get("heading_path"),
+                    chunk.get("field_label"),
+                    chunk.get("table_origin"),
+                    chunk["normalized_text"],
+                )
+                if value
+            ).lower()
             score = 0.0
             for term in terms:
-                if term in haystack:
-                    score += haystack.count(term)
+                if term in metadata_haystack:
+                    score += metadata_haystack.count(term)
 
             if score <= 0:
                 continue
 
             if chunk["quality_level"] == "low":
                 score -= 0.15
+            if chunk.get("section_type") == "field":
+                score += 0.55
+                score += self._field_label_query_boost(query=query, field_label=chunk.get("field_label"))
+            elif chunk.get("section_type") == "heading":
+                score += 0.25
+                if query_seeks_field_answer:
+                    score -= 3.0
 
             scored.append(
                 {
@@ -246,6 +277,11 @@ class SearchService:
                     "excerpt": chunk["excerpt"],
                     "relevance_score": round(score, 3),
                     "normalized_text": chunk["normalized_text"],
+                    "section_type": chunk.get("section_type", "body"),
+                    "heading_path": chunk.get("heading_path"),
+                    "field_label": chunk.get("field_label"),
+                    "table_origin": chunk.get("table_origin"),
+                    "proposition_type": chunk.get("proposition_type"),
                 }
             )
 
@@ -519,6 +555,9 @@ class SearchService:
         return (
             f"{item['source_title']} "
             f"{item.get('location_label', '')} "
+            f"{item.get('heading_path', '')} "
+            f"{item.get('field_label', '')} "
+            f"{item.get('table_origin', '')} "
             f"{item.get('excerpt', '')} "
             f"{item.get('normalized_text', '')}"
         ).lower()
@@ -530,5 +569,32 @@ class SearchService:
         return any(term in title for term in strong_terms[:8])
 
     def _hit_field_like_section(self, item: dict) -> bool:
-        field_haystack = f"{item.get('location_label', '')} {item.get('excerpt', '')}".lower()
+        field_haystack = (
+            f"{item.get('location_label', '')} "
+            f"{item.get('field_label', '')} "
+            f"{item.get('excerpt', '')}"
+        ).lower()
         return any(label in field_haystack for label in FIELD_LABEL_HINTS)
+
+    def _field_label_query_boost(self, *, query: str, field_label: str | None) -> float:
+        if not field_label:
+            return 0.0
+
+        normalized_query = " ".join(query.split()).lower()
+        normalized_label = field_label.lower()
+        boost = 0.0
+
+        if normalized_label in normalized_query:
+            boost += 1.2
+
+        for trigger, labels in FIELD_QUERY_GROUPS.items():
+            if trigger not in normalized_query:
+                continue
+            if any(label in normalized_label for label in labels):
+                boost += 4.0
+
+        return boost
+
+    def _query_seeks_field_answer(self, query: str) -> bool:
+        normalized_query = " ".join(query.split()).lower()
+        return any(trigger in normalized_query for trigger in FIELD_QUERY_GROUPS)

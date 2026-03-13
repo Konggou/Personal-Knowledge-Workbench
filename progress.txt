@@ -357,3 +357,24 @@ V2 Roadmap Refinement
   - Self-RAG
   - RL-enhanced RAG
   - full multimodal RAG
+
+Completed Feature Slice
+- Implemented the first V2.2 document-understanding slice:
+  - `source_chunks` now stores structured metadata for `section_type`, `heading_path`, `field_label`, `table_origin`, and reserved `proposition_type`
+  - DOCX ingestion now preserves heading, body, field, and table-row structure before chunk assembly
+  - PDF ingestion now applies lightweight heading/field detection before building chunks
+  - retrieval scoring now considers field labels and heading paths, so field-style questions are less likely to be dominated by generic cover-page hits
+  - source preview now exposes structured chunk metadata to support later UI and debugging work
+- Fixed two ingestion bugs uncovered during this slice:
+  - source chunk insertion had a SQL values/columns mismatch that could fail ingestion
+  - local/test web ingestion now bypasses ambient proxy environment variables via `httpx(..., trust_env=False)`
+
+Verified
+- Backend pytest passed after V2.2 structured chunking slice:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
+  - 24 tests passed
+
+Remaining V2.2 Work
+- proposition chunk generation
+- stronger PDF layout reconstruction
+- lightweight hierarchical retrieval over summary/title blocks

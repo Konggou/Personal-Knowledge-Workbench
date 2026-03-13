@@ -318,3 +318,17 @@ Qdrant 是默认向量索引层。
   - Self-RAG
   - RL-enhanced RAG
   - full multimodal RAG
+## 10. V2.2 Structured Chunking Notes
+
+- `source_chunks` now carries structured retrieval metadata:
+  - `section_type`
+  - `heading_path`
+  - `field_label`
+  - `table_origin`
+  - `proposition_type`
+- `SourceService` now builds structured chunk blocks before persistence:
+  - DOCX: heading-aware, field-aware, table-aware
+  - PDF: lightweight heading/field detection plus body chunk assembly
+- `SearchService` now treats field chunks and heading paths as first-class lexical signals.
+- `VectorStore` payloads now persist the same metadata so semantic hits can be merged back with structured context.
+- `proposition_type` is intentionally reserved for the later proposition-chunk phase and is not populated yet in V2.2 first slice.

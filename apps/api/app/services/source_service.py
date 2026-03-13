@@ -4,7 +4,10 @@ from pathlib import Path
 
 import httpx
 from docx import Document
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
 from docx.table import Table, _Cell
+from docx.text.paragraph import Paragraph
 from fastapi import HTTPException, UploadFile
 from pypdf import PdfReader
 
@@ -82,7 +85,15 @@ class SourceService:
 
         try:
             title, text = self._fetch_web_content(url)
-            self._complete_ingestion(source_id=source.id, project_id=project_id, title=title, text=text, reason="source_ingested")
+            chunks = self._build_plain_text_chunks(text)
+            self._complete_ingestion(
+                source_id=source.id,
+                project_id=project_id,
+                title=title,
+                text=text,
+                chunks=chunks,
+                reason="source_ingested",
+            )
         except Exception as exc:
             self.repository.finalize_source_failure(
                 source_id=source.id,
@@ -122,12 +133,16 @@ class SourceService:
 
             try:
                 content = await file.read()
-                text = self._extract_pdf_text(content) if source_type == "file_pdf" else self._extract_docx_text(content)
+                if source_type == "file_pdf":
+                    text, chunks = self._extract_pdf_content(content)
+                else:
+                    text, chunks = self._extract_docx_content(content)
                 self._complete_ingestion(
                     source_id=source.id,
                     project_id=project_id,
                     title=filename,
                     text=text,
+                    chunks=chunks,
                     reason="source_ingested",
                 )
             except Exception as exc:
@@ -166,11 +181,13 @@ class SourceService:
         self.repository.mark_source_processing(source_id)
         try:
             title, text = self._fetch_web_content(source.canonical_uri)
+            chunks = self._build_plain_text_chunks(text)
             self._complete_ingestion(
                 source_id=source.id,
                 project_id=source.project_id,
                 title=title,
                 text=text,
+                chunks=chunks,
                 reason="source_refreshed",
             )
         except Exception as exc:
@@ -237,8 +254,16 @@ class SourceService:
             content_md=f"{prefix}：{source['title']}",
         )
 
-    def _complete_ingestion(self, *, source_id: str, project_id: str, title: str, text: str, reason: str) -> None:
-        chunks = self._chunk_text(text)
+    def _complete_ingestion(
+        self,
+        *,
+        source_id: str,
+        project_id: str,
+        title: str,
+        text: str,
+        chunks: list[dict],
+        reason: str,
+    ) -> None:
         if not chunks:
             raise ValueError("No usable text could be extracted from the source.")
 
@@ -253,49 +278,135 @@ class SourceService:
         )
         self._sync_source_vectors(source_id)
 
-    def _extract_pdf_text(self, content: bytes) -> str:
+    def _extract_pdf_content(self, content: bytes) -> tuple[str, list[dict]]:
         reader = PdfReader(BytesIO(content))
-        parts: list[str] = []
+        pages: list[str] = []
         for page in reader.pages:
             extracted = (page.extract_text() or "").strip()
             if extracted:
-                parts.append(extracted)
-        text = "\n\n".join(parts).strip()
+                pages.append(extracted)
+        text = "\n\n".join(pages).strip()
         if not text:
             raise ValueError("The PDF did not produce readable text.")
-        return text
+        blocks = self._extract_pdf_blocks(text)
+        return text, self._build_structured_chunks(blocks)
 
-    def _extract_docx_text(self, content: bytes) -> str:
+    def _extract_docx_content(self, content: bytes) -> tuple[str, list[dict]]:
         document = Document(BytesIO(content))
-        blocks = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
-        blocks.extend(self._extract_docx_tables(document.tables))
-        text = "\n\n".join(block for block in blocks if block).strip()
+        blocks = self._extract_docx_blocks(document)
+        text = "\n\n".join(block["normalized_text"] for block in blocks if block["normalized_text"]).strip()
         if not text:
             raise ValueError("The DOCX did not produce readable text.")
-        return text
+        return text, self._build_structured_chunks(blocks)
 
-    def _extract_docx_tables(self, tables: list[Table]) -> list[str]:
-        rows: list[str] = []
-        for table in tables:
-            for row in table.rows:
-                cells: list[str] = []
-                for cell in row.cells:
-                    cell_text = self._extract_docx_cell_text(cell)
-                    if cell_text:
-                        cells.append(cell_text)
-                if cells:
-                    rows.append(" | ".join(cells))
-        return rows
+    def _extract_docx_blocks(self, document) -> list[dict]:
+        blocks: list[dict] = []
+        heading_stack: list[tuple[int, str]] = []
+        for item in self._iter_docx_block_items(document):
+            if isinstance(item, Paragraph):
+                paragraph_text = item.text.strip()
+                if not paragraph_text:
+                    continue
+                heading_level = self._detect_docx_heading_level(item)
+                if heading_level is not None:
+                    heading_stack = [entry for entry in heading_stack if entry[0] < heading_level]
+                    heading_stack.append((heading_level, paragraph_text))
+                    blocks.append(
+                        self._make_chunk_block(
+                            text=paragraph_text,
+                            section_label=paragraph_text,
+                            section_type="heading",
+                            heading_path=self._format_heading_path(heading_stack),
+                        )
+                    )
+                    continue
+
+                field_pair = self._split_field_pair(paragraph_text)
+                if field_pair is not None:
+                    label, value = field_pair
+                    blocks.append(
+                        self._make_chunk_block(
+                            text=f"{label}: {value}",
+                            section_label=label,
+                            section_type="field",
+                            heading_path=self._format_heading_path(heading_stack),
+                            field_label=label,
+                        )
+                    )
+                    continue
+
+                blocks.append(
+                    self._make_chunk_block(
+                        text=paragraph_text,
+                        section_label=self._default_section_label(heading_stack),
+                        section_type="body",
+                        heading_path=self._format_heading_path(heading_stack),
+                    )
+                )
+                continue
+
+            if isinstance(item, Table):
+                table_blocks = self._extract_docx_table_blocks(item, heading_stack=heading_stack)
+                blocks.extend(table_blocks)
+        return blocks
+
+    def _extract_docx_table_blocks(self, table: Table, *, heading_stack: list[tuple[int, str]]) -> list[dict]:
+        blocks: list[dict] = []
+        for row_index, row in enumerate(table.rows):
+            cells: list[str] = []
+            for cell in row.cells:
+                cell_text = self._extract_docx_cell_text(cell)
+                if cell_text:
+                    cells.append(cell_text)
+            if not cells:
+                continue
+
+            if len(cells) >= 2 and len(cells[0]) <= 24:
+                label = cells[0]
+                value = " ".join(cells[1:]).strip()
+                blocks.append(
+                    self._make_chunk_block(
+                        text=f"{label}: {value}",
+                        section_label=label,
+                        section_type="field",
+                        heading_path=self._format_heading_path(heading_stack),
+                        field_label=label,
+                        table_origin=f"table_row_{row_index + 1}",
+                    )
+                )
+                continue
+
+            row_text = " | ".join(cells)
+            blocks.append(
+                self._make_chunk_block(
+                    text=row_text,
+                    section_label=self._default_section_label(heading_stack),
+                    section_type="table_row",
+                    heading_path=self._format_heading_path(heading_stack),
+                    table_origin=f"table_row_{row_index + 1}",
+                )
+            )
+        return blocks
 
     def _extract_docx_cell_text(self, cell: _Cell) -> str:
         parts = [paragraph.text.strip() for paragraph in cell.paragraphs if paragraph.text.strip()]
-        nested_rows = self._extract_docx_tables(cell.tables)
-        if nested_rows:
-            parts.extend(nested_rows)
+        for table in cell.tables:
+            for row in table.rows:
+                row_cells: list[str] = []
+                for nested_cell in row.cells:
+                    nested_text = " ".join(
+                        paragraph.text.strip()
+                        for paragraph in nested_cell.paragraphs
+                        if paragraph.text.strip()
+                    )
+                    if nested_text:
+                        row_cells.append(nested_text)
+                if row_cells:
+                    parts.append(" | ".join(row_cells))
         return " ".join(part for part in parts if part)
 
     def _fetch_web_content(self, url: str) -> tuple[str, str]:
-        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+        with httpx.Client(timeout=15.0, follow_redirects=True, trust_env=False) as client:
             response = client.get(url)
             response.raise_for_status()
 
@@ -308,24 +419,186 @@ class SourceService:
             raise ValueError("No readable body content was extracted from the page.")
         return title, text
 
-    def _chunk_text(self, text: str, max_chars: int = 900) -> list[str]:
+    def _build_plain_text_chunks(self, text: str, max_chars: int = 900) -> list[dict]:
         paragraphs = [paragraph.strip() for paragraph in text.splitlines() if paragraph.strip()]
-        chunks: list[str] = []
-        current = ""
+        blocks = [
+            self._make_chunk_block(
+                text=paragraph,
+                section_label="body",
+                section_type="body",
+            )
+            for paragraph in paragraphs
+        ]
+        return self._build_structured_chunks(blocks, max_chars=max_chars)
 
-        for paragraph in paragraphs:
-            candidate = f"{current}\n\n{paragraph}".strip() if current else paragraph
-            if len(candidate) <= max_chars:
-                current = candidate
+    def _build_structured_chunks(self, blocks: list[dict], max_chars: int = 900) -> list[dict]:
+        chunks: list[dict] = []
+        current: dict | None = None
+
+        def flush() -> None:
+            nonlocal current
+            if current is None:
+                return
+            normalized_text = current["normalized_text"].strip()
+            if normalized_text:
+                current["excerpt"] = normalized_text[:280]
+                chunks.append(dict(current))
+            current = None
+
+        for block in blocks:
+            text = block["normalized_text"].strip()
+            if not text:
                 continue
-            if current:
-                chunks.append(current)
-            current = paragraph
+            if block["section_type"] in {"heading", "field", "table_row"}:
+                flush()
+                single = dict(block)
+                single["normalized_text"] = text
+                single["excerpt"] = text[:280]
+                chunks.append(single)
+                continue
 
-        if current:
-            chunks.append(current)
+            if current is None:
+                current = dict(block)
+                current["normalized_text"] = text
+                continue
 
+            same_bucket = (
+                current["section_type"] == block["section_type"]
+                and current.get("heading_path") == block.get("heading_path")
+                and current.get("field_label") == block.get("field_label")
+                and current.get("table_origin") == block.get("table_origin")
+            )
+            candidate = f"{current['normalized_text']}\n\n{text}".strip()
+            if same_bucket and len(candidate) <= max_chars:
+                current["normalized_text"] = candidate
+                continue
+
+            flush()
+            current = dict(block)
+            current["normalized_text"] = text
+
+        flush()
         return chunks
+
+    def _extract_pdf_blocks(self, text: str) -> list[dict]:
+        blocks: list[dict] = []
+        heading_stack: list[tuple[int, str]] = []
+        for raw_line in text.splitlines():
+            line = " ".join(raw_line.split()).strip()
+            if not line:
+                continue
+
+            if self._looks_like_heading_line(line):
+                heading_stack = [(1, line)]
+                blocks.append(
+                    self._make_chunk_block(
+                        text=line,
+                        section_label=line,
+                        section_type="heading",
+                        heading_path=line,
+                    )
+                )
+                continue
+
+            field_pair = self._split_field_pair(line)
+            if field_pair is not None:
+                label, value = field_pair
+                blocks.append(
+                    self._make_chunk_block(
+                        text=f"{label}: {value}",
+                        section_label=label,
+                        section_type="field",
+                        heading_path=self._format_heading_path(heading_stack),
+                        field_label=label,
+                    )
+                )
+                continue
+
+            blocks.append(
+                self._make_chunk_block(
+                    text=line,
+                    section_label=self._default_section_label(heading_stack),
+                    section_type="body",
+                    heading_path=self._format_heading_path(heading_stack),
+                )
+            )
+        return blocks
+
+    def _iter_docx_block_items(self, parent):
+        if hasattr(parent, "element") and hasattr(parent.element, "body"):
+            parent_element = parent.element.body
+        else:
+            parent_element = parent._tc
+
+        for child in parent_element.iterchildren():
+            if isinstance(child, CT_P):
+                yield Paragraph(child, parent)
+            elif isinstance(child, CT_Tbl):
+                yield Table(child, parent)
+
+    def _detect_docx_heading_level(self, paragraph: Paragraph) -> int | None:
+        style_name = (paragraph.style.name or "").lower() if paragraph.style is not None else ""
+        if style_name.startswith("heading"):
+            digits = "".join(character for character in style_name if character.isdigit())
+            if digits:
+                return int(digits)
+            return 1
+
+        text = paragraph.text.strip()
+        if self._looks_like_heading_line(text):
+            return 1
+        return None
+
+    def _looks_like_heading_line(self, text: str) -> bool:
+        if len(text) > 32:
+            return False
+        if any(marker in text for marker in (":", "：", ".", "。", "?", "？", "!", "！", "|")):
+            return False
+        return True
+
+    def _split_field_pair(self, text: str) -> tuple[str, str] | None:
+        for separator in ("：", ":"):
+            if separator not in text:
+                continue
+            label, value = text.split(separator, 1)
+            label = label.strip()
+            value = value.strip()
+            if 0 < len(label) <= 24 and value:
+                return label, value
+        return None
+
+    def _make_chunk_block(
+        self,
+        *,
+        text: str,
+        section_label: str,
+        section_type: str,
+        heading_path: str | None = None,
+        field_label: str | None = None,
+        table_origin: str | None = None,
+        proposition_type: str | None = None,
+    ) -> dict:
+        normalized_text = " ".join(text.split()).strip()
+        return {
+            "section_label": section_label,
+            "section_type": section_type,
+            "heading_path": heading_path,
+            "field_label": field_label,
+            "table_origin": table_origin,
+            "proposition_type": proposition_type,
+            "normalized_text": normalized_text,
+            "excerpt": normalized_text[:280],
+        }
+
+    def _format_heading_path(self, heading_stack: list[tuple[int, str]]) -> str | None:
+        if not heading_stack:
+            return None
+        return " > ".join(title for _, title in heading_stack)
+
+    def _default_section_label(self, heading_stack: list[tuple[int, str]]) -> str:
+        if not heading_stack:
+            return "body"
+        return heading_stack[-1][1]
 
     def _sync_source_vectors(self, source_id: str) -> None:
         chunks = self.repository.get_latest_source_chunks_for_indexing(source_id)

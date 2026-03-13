@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app.core.settings import get_settings
 
-SCHEMA_VERSION = "chat_first_grounded_v1"
+SCHEMA_VERSION = "chat_first_grounded_v2_structured_chunks"
 
 
 def _load_schema(schema_path: Path) -> str:

@@ -57,6 +57,10 @@ class SourceRecord:
 class SourcePreviewChunkRecord:
     id: str
     section_label: str
+    section_type: str
+    heading_path: str | None
+    field_label: str | None
+    table_origin: str | None
     chunk_index: int
     excerpt: str
     normalized_text: str
@@ -66,6 +70,10 @@ class SourcePreviewChunkRecord:
         return {
             "id": self.id,
             "location_label": f"{self.section_label} #{self.chunk_index + 1}",
+            "section_type": self.section_type,
+            "heading_path": self.heading_path,
+            "field_label": self.field_label,
+            "table_origin": self.table_origin,
             "excerpt": self.excerpt,
             "normalized_text": self.normalized_text,
             "char_count": self.char_count,
@@ -289,6 +297,10 @@ class SourceRepository:
                 SELECT
                   sc.id,
                   sc.section_label,
+                  sc.section_type,
+                  sc.heading_path,
+                  sc.field_label,
+                  sc.table_origin,
                   sc.chunk_index,
                   sc.excerpt,
                   sc.normalized_text,
@@ -328,6 +340,11 @@ class SourceRepository:
                   sc.snapshot_id,
                   sc.qdrant_point_id,
                   sc.section_label,
+                  sc.section_type,
+                  sc.heading_path,
+                  sc.field_label,
+                  sc.table_origin,
+                  sc.proposition_type,
                   sc.chunk_index,
                   sc.normalized_text,
                   sc.excerpt,
@@ -454,7 +471,7 @@ class SourceRepository:
         project_id: str,
         title: str,
         quality_level: str,
-        chunks: list[str],
+        chunks: list[dict],
         reason: str = "source_ingested",
     ) -> None:
         created_at = datetime.now(UTC).isoformat()
@@ -464,13 +481,15 @@ class SourceRepository:
             for index, chunk in enumerate(chunks):
                 chunk_id = str(uuid4())
                 point_id = str(uuid4())
+                normalized_text = chunk["normalized_text"]
                 connection.execute(
                     """
                     INSERT INTO source_chunks (
                       id, source_id, project_id, snapshot_id, qdrant_point_id,
-                      section_label, chunk_index, token_count, char_count,
+                      section_label, section_type, heading_path, field_label, table_origin, proposition_type,
+                      chunk_index, token_count, char_count,
                       normalized_text, excerpt, retrieval_enabled, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         chunk_id,
@@ -478,12 +497,18 @@ class SourceRepository:
                         project_id,
                         snapshot_id,
                         point_id,
-                        "body",
+                        chunk["section_label"],
+                        chunk["section_type"],
+                        chunk.get("heading_path"),
+                        chunk.get("field_label"),
+                        chunk.get("table_origin"),
+                        chunk.get("proposition_type"),
                         index,
-                        max(1, len(chunk) // 4),
-                        len(chunk),
-                        chunk,
-                        chunk[:280],
+                        max(1, len(normalized_text) // 4),
+                        len(normalized_text),
+                        normalized_text,
+                        chunk["excerpt"],
+                        1,
                         created_at,
                     ),
                 )
@@ -492,7 +517,7 @@ class SourceRepository:
                     INSERT INTO source_chunk_fts (chunk_id, project_id, snapshot_id, title, normalized_text)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (chunk_id, project_id, snapshot_id, title, chunk),
+                    (chunk_id, project_id, snapshot_id, title, normalized_text),
                 )
 
             status = "ready" if quality_level == "normal" else "ready_low_quality"
