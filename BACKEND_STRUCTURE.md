@@ -289,3 +289,32 @@ Qdrant 是默认向量索引层。
 - 前端只消费项目、会话、知识库、来源语义
 - 来源气泡只代表最终喂给模型的证据，不暴露召回候选或内部 rerank 术语
 - 来源详细预览可按前端交互使用覆盖式浮层，但不改变后端对象模型
+
+## 8. V2.1 Retrieval Foundation
+
+- The grounded retrieval path now keeps the public API unchanged while adding an internal two-stage strategy:
+  - first pass hybrid retrieval
+  - second pass contextual rewrite / field alias expansion / conditional HyDE
+- Retrieval now accepts recent user-message history as context clues for follow-up questions.
+- Internal retrieval diagnostics are recorded for backend use only:
+  - whether first pass was low confidence
+  - whether contextual rewrite was triggered
+  - whether HyDE was triggered
+  - final source count
+  - final grounded candidate status
+- Diagnostics are intentionally not exposed in frontend payloads or SSE semantics.
+
+## 9. V2 Direction After Article Review
+
+- Near-term priorities:
+  - query transformation
+  - adaptive retrieval
+  - CRAG-lite style retrieval repair
+  - semantic / proposition chunking
+  - lightweight hierarchical retrieval
+  - contextual compression and relevant-segment extraction
+- Explicitly out of the current V2 mainline:
+  - GraphRAG
+  - Self-RAG
+  - RL-enhanced RAG
+  - full multimodal RAG

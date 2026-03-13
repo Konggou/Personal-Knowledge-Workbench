@@ -328,3 +328,32 @@ Verified
 - Markdown rendering verification passed:
   - frontend typecheck/build passed after adding markdown dependencies
   - browser automation confirmed a live answer can render as one `h2` plus two list items inside the chat view
+
+Completed Feature Slice
+- Implemented the V2.1 retrieval foundation:
+  - project retrieval now supports contextual follow-up handling using recent user-message history
+  - low-confidence queries now retry through a two-stage path: contextual rewrite -> field alias expansion -> conditional HyDE
+  - grounded retrieval now records internal diagnostics without changing frontend contracts
+  - grounded/session orchestration now passes conversation history into retrieval
+- Added backend regression coverage for:
+  - contextual follow-up retrieval
+  - field-hit diagnostics
+  - grounded-generation diagnostics handoff
+  - a minimal retrieval evaluation sample set
+
+Verified
+- Backend pytest passed after V2.1 retrieval upgrade:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
+  - 22 tests passed
+
+V2 Roadmap Refinement
+- Absorbed the article-driven roadmap into the project plan:
+  - V2.1: query transformation + adaptive retrieval + conditional HyDE + CRAG-lite
+  - V2.2: semantic chunking + proposition chunking + heading/field enhancement + lightweight hierarchical retrieval
+  - V2.3: contextual compression + relevant segment extraction + stronger evidence selection
+  - V2.4: evaluation, observability, and stability expansion
+- Explicitly deferred from the current V2 mainline:
+  - GraphRAG
+  - Self-RAG
+  - RL-enhanced RAG
+  - full multimodal RAG

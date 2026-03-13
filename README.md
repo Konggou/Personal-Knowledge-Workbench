@@ -215,3 +215,34 @@ agentic_rag/
 - 更强的 DOCX / PDF 结构化切块与字段提取
 - 更稳定的 grounded markdown 输出与列表格式归一化
 - 更完善的真实问答评测与端到端回归
+
+## V2 Detailed Direction
+
+The current V2 mainline is intentionally focused on high-yield retrieval and answer-quality work:
+
+- V2.1:
+  - query transformation
+  - adaptive retrieval
+  - contextual follow-up handling
+  - conditional HyDE
+  - CRAG-lite style retrieval repair
+- V2.2:
+  - semantic chunking
+  - proposition chunking
+  - heading / field-aware metadata
+  - lightweight hierarchical retrieval
+- V2.3:
+  - contextual compression before generation
+  - relevant segment extraction
+  - stronger evidence selection and rerank
+- V2.4:
+  - evaluation dataset
+  - retrieval / generation observability
+  - stability-focused end-to-end regression expansion
+
+Not in the current V2 mainline:
+
+- GraphRAG
+- Self-RAG
+- RL-enhanced RAG
+- full multimodal RAG

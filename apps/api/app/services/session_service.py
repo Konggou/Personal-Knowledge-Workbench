@@ -114,6 +114,7 @@ class SessionService:
             project_id=session["project_id"],
             query=normalized_content,
             research_mode=research_mode,
+            history=current_session["messages"],
         )
         answer = self._generate_answer(
             history=current_session["messages"],
@@ -160,6 +161,7 @@ class SessionService:
                     project_id=session["project_id"],
                     query=normalized_content,
                     research_mode=research_mode,
+                    history=current_session["messages"],
                 )
 
                 stream = self._stream_generate_answer(

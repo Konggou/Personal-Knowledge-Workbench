@@ -3,6 +3,32 @@ from app.services.llm_service import LLMService
 from app.services.search_service import SearchService
 
 
+def _with_diagnostics(evidence: list[dict], *, grounded_candidate: bool = True) -> tuple[list[dict], dict]:
+    return (
+        evidence,
+        {
+            "original_query": "test",
+            "context_clues": [],
+            "first_pass": {
+                "hit_count": len(evidence),
+                "top_score": evidence[0]["relevance_score"] if evidence else 0.0,
+                "title_hit_count": 1 if evidence else 0,
+                "field_hit_count": 0,
+                "term_coverage_ratio": 1.0 if evidence else 0.0,
+                "is_low_confidence": False,
+            },
+            "triggered_second_pass": False,
+            "retry_steps": [],
+            "final": {
+                "hit_count": len(evidence),
+                "source_count": len({item["source_id"] for item in evidence}),
+                "grounded_candidate": grounded_candidate and bool(evidence),
+                "returned_hit_count": len(evidence),
+            },
+        },
+    )
+
+
 def _create_project(client, *, name: str = "Grounded Project") -> dict:
     response = client.post(
         "/api/v1/projects",
@@ -59,8 +85,8 @@ def test_grounded_message_uses_llm_markdown_and_final_sources_only(client, monke
 
     monkeypatch.setattr(
         sessions_route_service.search,
-        "retrieve_project_evidence",
-        lambda project_id, query, limit=3, apply_rerank=False: evidence,
+        "retrieve_project_evidence_with_diagnostics",
+        lambda project_id, query, limit=3, apply_rerank=False, history=None: _with_diagnostics(evidence),
     )
     monkeypatch.setattr(
         sessions_route_service.llm,
@@ -100,11 +126,12 @@ def test_grounded_complex_query_enables_v1_rerank(client, monkeypatch, html_serv
     )
     source = client.post(f"/api/v1/projects/{project['id']}/sources/web", json={"url": source_url}).json()["item"]
 
-    def fake_retrieve(project_id, query, limit=3, apply_rerank=False):
+    def fake_retrieve(project_id, query, limit=3, apply_rerank=False, history=None):
         captured["apply_rerank"] = apply_rerank
-        return _sample_evidence(source)
+        captured["history"] = history
+        return _with_diagnostics(_sample_evidence(source))
 
-    monkeypatch.setattr(sessions_route_service.search, "retrieve_project_evidence", fake_retrieve)
+    monkeypatch.setattr(sessions_route_service.search, "retrieve_project_evidence_with_diagnostics", fake_retrieve)
     monkeypatch.setattr(
         sessions_route_service.llm,
         "generate_grounded_reply",
@@ -122,6 +149,7 @@ def test_grounded_complex_query_enables_v1_rerank(client, monkeypatch, html_serv
     assert response.status_code == 200, response.text
     detail = response.json()["item"]
     assert captured["apply_rerank"] is True
+    assert captured["history"][-1]["content_md"]
     assert all(item["message_type"] != "status_card" for item in detail["messages"])
     answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
     assert answer["title"] is None
@@ -138,12 +166,13 @@ def test_explicit_deep_research_always_reranks_and_uses_five_evidences(client, m
     )
     source = client.post(f"/api/v1/projects/{project['id']}/sources/web", json={"url": source_url}).json()["item"]
 
-    def fake_retrieve(project_id, query, limit=3, apply_rerank=False):
+    def fake_retrieve(project_id, query, limit=3, apply_rerank=False, history=None):
         captured["limit"] = limit
         captured["apply_rerank"] = apply_rerank
-        return _sample_evidence(source, count=5)
+        captured["history"] = history
+        return _with_diagnostics(_sample_evidence(source, count=5))
 
-    monkeypatch.setattr(sessions_route_service.search, "retrieve_project_evidence", fake_retrieve)
+    monkeypatch.setattr(sessions_route_service.search, "retrieve_project_evidence_with_diagnostics", fake_retrieve)
     monkeypatch.setattr(
         sessions_route_service.llm,
         "generate_grounded_reply",
@@ -161,7 +190,9 @@ def test_explicit_deep_research_always_reranks_and_uses_five_evidences(client, m
     assert response.status_code == 200, response.text
     detail = response.json()["item"]
 
-    assert captured == {"limit": 5, "apply_rerank": True}
+    assert captured["limit"] == 5
+    assert captured["apply_rerank"] is True
+    assert captured["history"][-1]["content_md"]
     answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
     assert answer["title"] == "调研结论"
     assert len(answer["sources"]) == 5
@@ -182,8 +213,8 @@ def test_grounded_stream_returns_llm_generated_markdown_and_metadata(client, mon
 
     monkeypatch.setattr(
         sessions_route_service.search,
-        "retrieve_project_evidence",
-        lambda project_id, query, limit=3, apply_rerank=False: evidence,
+        "retrieve_project_evidence_with_diagnostics",
+        lambda project_id, query, limit=3, apply_rerank=False, history=None: _with_diagnostics(evidence),
     )
 
     def fake_stream_grounded_reply(**kwargs):
@@ -221,8 +252,8 @@ def test_grounded_stream_partial_failure_keeps_partial_output_and_appends_tail_n
 
     monkeypatch.setattr(
         sessions_route_service.search,
-        "retrieve_project_evidence",
-        lambda project_id, query, limit=3, apply_rerank=False: evidence,
+        "retrieve_project_evidence_with_diagnostics",
+        lambda project_id, query, limit=3, apply_rerank=False, history=None: _with_diagnostics(evidence),
     )
 
     def fake_stream_grounded_reply(**kwargs):
@@ -365,4 +396,159 @@ def test_search_service_skips_hyde_when_first_pass_is_already_strong(monkeypatch
 
     assert calls == ["我的开题报告题目是什么"]
     assert hyde_called["value"] is False
-    assert results == strong_hits
+    assert results[0]["source_id"] == strong_hits[0]["source_id"]
+    assert results[0]["excerpt"] == strong_hits[0]["excerpt"]
+
+def test_search_service_promotes_contextual_follow_up_into_retry_queries(monkeypatch):
+    service = SearchService(llm_service=sessions_route_service.llm)
+    calls: list[str] = []
+
+    weak_hits = [
+        {
+            "chunk_id": "chunk-1",
+            "source_id": "source-1",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "Section #1",
+            "excerpt": "This is only a weak overview.",
+            "normalized_text": "This is only a weak overview.",
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "relevance_score": 1.4,
+            "quality_level": "normal",
+        }
+    ]
+    strong_hits = [
+        {
+            "chunk_id": "chunk-2",
+            "source_id": "source-1",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "题目 #1",
+            "excerpt": "题目：基于STM32的室内空气质量检测与智能控制系统设计",
+            "normalized_text": "题目：基于STM32的室内空气质量检测与智能控制系统设计",
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "relevance_score": 4.1,
+            "quality_level": "normal",
+        }
+    ]
+
+    def fake_retrieve_ranked_hits(*, project_id, query, limit):
+        calls.append(query)
+        if len(calls) == 1:
+            return weak_hits
+        return strong_hits
+
+    monkeypatch.setattr(service, "_retrieve_ranked_hits", fake_retrieve_ranked_hits)
+    monkeypatch.setattr(service.llm, "generate_hypothetical_passage", lambda **kwargs: None)
+
+    results, diagnostics = service.retrieve_project_evidence_with_diagnostics(
+        "project-1",
+        "现在你知道了吗",
+        limit=3,
+        apply_rerank=False,
+        history=[
+            {"role": "user", "content_md": "我的开题报告题目是什么"},
+            {"role": "assistant", "content_md": "我来查一下"},
+        ],
+    )
+
+    assert len(calls) >= 2
+    assert calls[1].startswith("我的开题报告题目是什么")
+    assert diagnostics["context_clues"] == ["我的开题报告题目是什么"]
+    assert diagnostics["triggered_second_pass"] is True
+    assert diagnostics["retry_steps"][0]["strategy"] == "context_rewrite"
+    assert results[0]["excerpt"].startswith("题目：")
+
+
+def test_search_service_collects_retrieval_diagnostics_for_field_hits(monkeypatch):
+    service = SearchService(llm_service=sessions_route_service.llm)
+    strong_hits = [
+        {
+            "chunk_id": "chunk-2",
+            "source_id": "source-1",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "题目 #1",
+            "excerpt": "题目：基于STM32的室内空气质量检测与智能控制系统设计",
+            "normalized_text": "题目：基于STM32的室内空气质量检测与智能控制系统设计",
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "relevance_score": 4.8,
+            "quality_level": "normal",
+        }
+    ]
+
+    monkeypatch.setattr(service, "_retrieve_ranked_hits", lambda **kwargs: strong_hits)
+    monkeypatch.setattr(service.llm, "generate_hypothetical_passage", lambda **kwargs: None)
+
+    results, diagnostics = service.retrieve_project_evidence_with_diagnostics(
+        "project-1",
+        "我的题目是什么",
+        limit=3,
+        apply_rerank=False,
+    )
+
+    assert results[0]["source_id"] == strong_hits[0]["source_id"]
+    assert results[0]["excerpt"] == strong_hits[0]["excerpt"]
+    assert diagnostics["first_pass"]["field_hit_count"] >= 1
+    assert diagnostics["first_pass"]["is_low_confidence"] is False
+    assert diagnostics["final"]["grounded_candidate"] is True
+
+
+def test_grounded_generation_stores_latest_retrieval_diagnostics(monkeypatch):
+    grounded_generation = sessions_route_service.grounded_generation
+    evidence = [
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-1",
+            "source_id": "source-1",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "题目 #1",
+            "excerpt": "题目：基于STM32的室内空气质量检测与智能控制系统设计",
+            "relevance_score": 4.2,
+        }
+    ]
+    diagnostics = {
+        "original_query": "我的题目是什么",
+        "context_clues": ["我的开题报告是什么项目"],
+        "first_pass": {
+            "hit_count": 1,
+            "top_score": 4.2,
+            "title_hit_count": 0,
+            "field_hit_count": 1,
+            "term_coverage_ratio": 1.0,
+            "is_low_confidence": False,
+        },
+        "triggered_second_pass": False,
+        "retry_steps": [],
+        "final": {
+            "hit_count": 1,
+            "source_count": 1,
+            "grounded_candidate": True,
+            "returned_hit_count": 1,
+        },
+    }
+
+    monkeypatch.setattr(
+        grounded_generation.search,
+        "retrieve_project_evidence_with_diagnostics",
+        lambda *args, **kwargs: (evidence, diagnostics),
+    )
+
+    packed = grounded_generation.retrieve_evidence(
+        project_id="project-1",
+        query="我的题目是什么",
+        research_mode=False,
+        history=[{"role": "user", "content_md": "我的开题报告是什么项目"}],
+    )
+
+    assert packed[0]["evidence_index"] == 1
+    assert grounded_generation.last_retrieval_diagnostics == diagnostics

@@ -1,33 +1,82 @@
 from __future__ import annotations
 
+import logging
+from contextvars import ContextVar
+
 from app.repositories.search_repository import SearchRepository
 from app.services.llm_service import LLMService
 from app.services.vector_store import VectorStore
 
 
 COMPLEX_QUERY_KEYWORDS = (
-    "比较",
-    "区别",
-    "优缺点",
-    "方案",
-    "评估",
-    "为什么",
-    "如何",
-    "总结",
-    "梳理",
-    "推荐",
-    "适合",
+    "\u6bd4\u8f83",
+    "\u533a\u522b",
+    "\u4f18\u7f3a\u70b9",
+    "\u65b9\u6848",
+    "\u8bc4\u4f30",
+    "\u4e3a\u4ec0\u4e48",
+    "\u5982\u4f55",
+    "\u603b\u7ed3",
+    "\u68b3\u7406",
+    "\u63a8\u8350",
+    "\u9002\u5408",
 )
 LOW_CONFIDENCE_TOP_SCORE = 2.2
 VERY_LOW_CONFIDENCE_TOP_SCORE = 1.2
-GENERIC_QUERY_TERMS = {"什么", "怎么", "如何", "现在", "知道", "我的", "了吗", "呢", "吗", "报告"}
-QUERY_EXPANSION_RULES = {
-    "题目": ("开题报告 题目 课题名称 项目名称", "课题名称 项目名称 题目"),
-    "标题": ("题目 课题名称 项目名称",),
-    "项目": ("项目名称 课题名称 研究主题",),
-    "优化": ("优化建议 可以改进的地方 不足 完善建议",),
-    "改进": ("优化建议 可以改进的地方 不足 完善建议",),
+GENERIC_QUERY_TERMS = {
+    "\u4ec0\u4e48",
+    "\u600e\u4e48",
+    "\u5982\u4f55",
+    "\u73b0\u5728",
+    "\u77e5\u9053",
+    "\u6211\u7684",
+    "\u4e86\u5417",
+    "\u5462",
+    "\u5417",
+    "\u62a5\u544a",
 }
+QUERY_EXPANSION_RULES = {
+    "\u9898\u76ee": (
+        "\u5f00\u9898\u62a5\u544a \u9898\u76ee \u8bfe\u9898\u540d\u79f0 \u9879\u76ee\u540d\u79f0",
+        "\u8bfe\u9898\u540d\u79f0 \u9879\u76ee\u540d\u79f0 \u9898\u76ee",
+    ),
+    "\u6807\u9898": ("\u9898\u76ee \u8bfe\u9898\u540d\u79f0 \u9879\u76ee\u540d\u79f0",),
+    "\u9879\u76ee": ("\u9879\u76ee\u540d\u79f0 \u8bfe\u9898\u540d\u79f0 \u7814\u7a76\u4e3b\u9898",),
+    "\u4f18\u5316": (
+        "\u4f18\u5316\u5efa\u8bae \u53ef\u4ee5\u6539\u8fdb\u7684\u5730\u65b9 \u4e0d\u8db3 \u5b8c\u5584\u5efa\u8bae",
+    ),
+    "\u6539\u8fdb": (
+        "\u4f18\u5316\u5efa\u8bae \u53ef\u4ee5\u6539\u8fdb\u7684\u5730\u65b9 \u4e0d\u8db3 \u5b8c\u5584\u5efa\u8bae",
+    ),
+}
+FIELD_LABEL_HINTS = (
+    "\u9898\u76ee",
+    "\u6807\u9898",
+    "\u9879\u76ee",
+    "\u9879\u76ee\u540d\u79f0",
+    "\u8bfe\u9898",
+    "\u8bfe\u9898\u540d\u79f0",
+    "\u7814\u7a76\u5185\u5bb9",
+    "\u521b\u65b0\u70b9",
+    "\u9884\u671f\u6210\u679c",
+    "\u7ed3\u8bba",
+    "\u5efa\u8bae",
+)
+FOLLOW_UP_QUERY_TERMS = {
+    "\u73b0\u5728",
+    "\u8fd9\u4e2a",
+    "\u90a3\u4e2a",
+    "\u8fd9\u4efd",
+    "\u90a3\u4efd",
+    "\u77e5\u9053",
+    "\u4e86\u5417",
+    "\u5b83",
+    "\u8fd9\u9879",
+    "\u90a3\u9879",
+}
+RETRIEVAL_CONTEXT_WINDOW = 3
+
+logger = logging.getLogger(__name__)
 
 
 class SearchService:
@@ -35,6 +84,10 @@ class SearchService:
         self.repository = SearchRepository()
         self.vector_store = VectorStore()
         self.llm = llm_service or LLMService()
+        self._last_retrieval_diagnostics: ContextVar[dict | None] = ContextVar(
+            "search_last_retrieval_diagnostics",
+            default=None,
+        )
 
     def get_project_current_snapshot_id(self, project_id: str) -> str | None:
         return self.repository.get_project_current_snapshot_id(project_id)
@@ -52,16 +105,94 @@ class SearchService:
         *,
         limit: int = 3,
         apply_rerank: bool = False,
+        history: list[dict] | None = None,
     ) -> list[dict]:
+        results, diagnostics = self.retrieve_project_evidence_with_diagnostics(
+            project_id,
+            query,
+            limit=limit,
+            apply_rerank=apply_rerank,
+            history=history,
+        )
+        self._last_retrieval_diagnostics.set(diagnostics)
+        return results
+
+    def retrieve_project_evidence_with_diagnostics(
+        self,
+        project_id: str,
+        query: str,
+        *,
+        limit: int = 3,
+        apply_rerank: bool = False,
+        history: list[dict] | None = None,
+    ) -> tuple[list[dict], dict]:
         candidate_limit = max(limit * 4, 12)
+        context_clues = self._collect_context_clues(query=query, history=history)
         merged = self._retrieve_ranked_hits(project_id=project_id, query=query, limit=candidate_limit)
-        if self._should_retry_with_hyde(query=query, hits=merged, limit=limit):
-            for retry_query in self._build_retry_queries(query=query, research_mode=limit > 3):
-                retry_hits = self._retrieve_ranked_hits(project_id=project_id, query=retry_query, limit=candidate_limit)
-                merged = self._merge_hit_batches(primary=merged, secondary=retry_hits, limit=candidate_limit)
+        first_pass = self._analyze_hits(
+            query=query,
+            hits=merged,
+            limit=limit,
+            context_clues=context_clues,
+        )
+        retry_steps: list[dict] = []
+
+        if first_pass["is_low_confidence"]:
+            for strategy, retry_query in self._build_retry_queries(
+                query=query,
+                research_mode=limit > 3,
+                context_clues=context_clues,
+            ):
+                retry_hits = self._retrieve_ranked_hits(
+                    project_id=project_id,
+                    query=retry_query,
+                    limit=candidate_limit,
+                )
+                retry_analysis = self._analyze_hits(
+                    query=retry_query,
+                    hits=retry_hits,
+                    limit=limit,
+                    context_clues=context_clues,
+                )
+                retry_steps.append(
+                    {
+                        "strategy": strategy,
+                        "query": retry_query,
+                        "hit_count": retry_analysis["hit_count"],
+                        "top_score": retry_analysis["top_score"],
+                    }
+                )
+                merged = self._merge_hit_batches(
+                    primary=merged,
+                    secondary=retry_hits,
+                    limit=candidate_limit,
+                )
+
         if apply_rerank:
-            return self._rerank_hits(query=query, hits=merged, limit=limit)
-        return merged[:limit]
+            results = self._rerank_hits(query=query, hits=merged, limit=limit)
+        else:
+            results = merged[:limit]
+
+        diagnostics = {
+            "original_query": query,
+            "context_clues": context_clues,
+            "first_pass": first_pass,
+            "triggered_second_pass": bool(retry_steps),
+            "retry_steps": retry_steps,
+            "final": {
+                "hit_count": len(merged),
+                "source_count": len({item["source_id"] for item in results}),
+                "grounded_candidate": bool(results),
+                "returned_hit_count": len(results),
+            },
+        }
+        logger.debug("retrieval diagnostics: %s", diagnostics)
+        self._last_retrieval_diagnostics.set(diagnostics)
+        return results, diagnostics
+
+    @property
+    def last_retrieval_diagnostics(self) -> dict | None:
+        return self._last_retrieval_diagnostics.get()
 
     def search(self, *, scope: str, query: str, project_id: str | None = None, limit: int = 10) -> dict:
         lexical_results = self._score_chunks(
@@ -74,7 +205,11 @@ class SearchService:
             project_id=project_id if scope == "project" else None,
             limit=max(limit * 3, 18),
         )
-        results = self._merge_ranked_hits(semantic_results=semantic_results, lexical_results=lexical_results, limit=limit)
+        results = self._merge_ranked_hits(
+            semantic_results=semantic_results,
+            lexical_results=lexical_results,
+            limit=limit,
+        )
         return {
             "scope": scope,
             "query": query,
@@ -183,60 +318,129 @@ class SearchService:
         ranked = sorted(merged.values(), key=lambda item: item["relevance_score"], reverse=True)
         return ranked[:limit]
 
-    def _should_retry_with_hyde(self, *, query: str, hits: list[dict], limit: int) -> bool:
+    def _should_retry_with_hyde(
+        self,
+        *,
+        query: str,
+        hits: list[dict],
+        limit: int,
+        context_clues: list[str] | None = None,
+    ) -> bool:
+        analysis = self._analyze_hits(
+            query=query,
+            hits=hits,
+            limit=limit,
+            context_clues=context_clues or [],
+        )
+        return analysis["is_low_confidence"]
+
+    def _analyze_hits(
+        self,
+        *,
+        query: str,
+        hits: list[dict],
+        limit: int,
+        context_clues: list[str],
+    ) -> dict:
         if not hits:
-            return True
+            return {
+                "hit_count": 0,
+                "top_score": 0.0,
+                "title_hit_count": 0,
+                "field_hit_count": 0,
+                "term_coverage_ratio": 0.0,
+                "is_low_confidence": True,
+            }
 
         top_score = float(hits[0]["relevance_score"])
-        if top_score <= VERY_LOW_CONFIDENCE_TOP_SCORE:
-            return True
-
         strong_terms = [
             term
             for term in self.repository.build_query_terms(query)
             if len(term) >= 2 and term not in GENERIC_QUERY_TERMS
         ]
-        if not strong_terms:
-            return len(hits) < limit and top_score < LOW_CONFIDENCE_TOP_SCORE
 
         coverage = 0
-        top_hits = hits[: min(3, len(hits))]
+        top_hits = hits[: min(5, len(hits))]
         for term in strong_terms[:8]:
-            if any(term in f"{item['source_title']} {item.get('excerpt', '')} {item.get('normalized_text', '')}".lower() for item in top_hits):
+            if any(term in self._hit_haystack(item) for item in top_hits):
                 coverage += 1
 
-        if coverage == 0:
-            return True
-        if coverage == 1 and (len(hits) < limit or top_score < LOW_CONFIDENCE_TOP_SCORE):
-            return True
-        return len(hits) < limit and top_score < LOW_CONFIDENCE_TOP_SCORE
+        title_hit_count = sum(1 for item in top_hits if self._hit_title_matches_terms(item, strong_terms))
+        field_hit_count = sum(1 for item in top_hits if self._hit_field_like_section(item))
+        coverage_ratio = round(coverage / max(len(strong_terms[:8]), 1), 3) if strong_terms else 0.0
+        query_looks_contextual = self._query_looks_contextual(query)
 
-    def _build_retry_queries(self, *, query: str, research_mode: bool) -> list[str]:
+        is_low_confidence = False
+        if top_score <= VERY_LOW_CONFIDENCE_TOP_SCORE:
+            is_low_confidence = True
+        elif not strong_terms:
+            is_low_confidence = len(hits) < limit and top_score < LOW_CONFIDENCE_TOP_SCORE
+        elif coverage == 0:
+            is_low_confidence = True
+        elif coverage_ratio < 0.34 and (top_score < LOW_CONFIDENCE_TOP_SCORE or title_hit_count == 0):
+            is_low_confidence = True
+        elif len(hits) < limit and top_score < LOW_CONFIDENCE_TOP_SCORE:
+            is_low_confidence = True
+
+        if field_hit_count > 0 and top_score >= LOW_CONFIDENCE_TOP_SCORE:
+            is_low_confidence = False
+
+        if (
+            query_looks_contextual
+            and context_clues
+            and (coverage_ratio < 0.5 or title_hit_count == 0)
+            and top_score < (LOW_CONFIDENCE_TOP_SCORE + 0.5)
+        ):
+            is_low_confidence = True
+
+        return {
+            "hit_count": len(hits),
+            "top_score": round(top_score, 3),
+            "title_hit_count": title_hit_count,
+            "field_hit_count": field_hit_count,
+            "term_coverage_ratio": coverage_ratio,
+            "is_low_confidence": is_low_confidence,
+        }
+
+    def _build_retry_queries(
+        self,
+        *,
+        query: str,
+        research_mode: bool,
+        context_clues: list[str],
+    ) -> list[tuple[str, str]]:
         normalized = " ".join(query.split())
-        retry_queries: list[str] = []
+        retry_queries: list[tuple[str, str]] = []
         seen: set[str] = {normalized}
+        context_seed = self._build_contextual_query(query=normalized, context_clues=context_clues)
 
-        def append(candidate: str) -> None:
+        def append(strategy: str, candidate: str) -> None:
             cleaned = " ".join(candidate.split()).strip()
             if not cleaned or cleaned in seen:
                 return
             seen.add(cleaned)
-            retry_queries.append(cleaned)
+            retry_queries.append((strategy, cleaned))
+
+        if context_seed and context_seed != normalized:
+            append("context_rewrite", context_seed)
 
         for term, variants in QUERY_EXPANSION_RULES.items():
             if term in normalized:
                 for variant in variants:
-                    append(f"{normalized} {variant}")
+                    append("field_alias_expansion", f"{context_seed or normalized} {variant}")
 
         expanded_terms = [term for term in self.repository.build_query_terms(query) if len(term) >= 2]
         if expanded_terms:
-            append(" ".join(expanded_terms[:6]))
+            append("term_compaction", " ".join(expanded_terms[:6]))
 
-        hypothetical_passage = self.llm.generate_hypothetical_passage(query=normalized, research_mode=research_mode)
+        hypothetical_passage = self.llm.generate_hypothetical_passage(
+            query=context_seed or normalized,
+            research_mode=research_mode,
+        )
         if hypothetical_passage:
-            append(hypothetical_passage)
+            append("hyde_passage", hypothetical_passage)
 
-        return retry_queries[:3]
+        return retry_queries[:4]
 
     def _rerank_hits(self, *, query: str, hits: list[dict], limit: int) -> list[dict]:
         terms = self.repository.build_query_terms(query)
@@ -264,3 +468,67 @@ class SearchService:
 
         reranked.sort(key=lambda item: item["relevance_score"], reverse=True)
         return reranked[:limit]
+
+    def _collect_context_clues(self, *, query: str, history: list[dict] | None) -> list[str]:
+        if not history:
+            return []
+
+        normalized_query = " ".join(query.split()).strip().lower()
+        clues: list[str] = []
+        seen: set[str] = set()
+        for item in reversed(history):
+            if item.get("role") != "user":
+                continue
+            content = " ".join((item.get("content_md") or "").split()).strip()
+            if not content:
+                continue
+            lowered = content.lower()
+            if lowered == normalized_query or lowered in seen:
+                continue
+            seen.add(lowered)
+            clues.append(content)
+            if len(clues) >= RETRIEVAL_CONTEXT_WINDOW:
+                break
+        return clues
+
+    def _build_contextual_query(self, *, query: str, context_clues: list[str]) -> str | None:
+        if not context_clues:
+            return None
+
+        if self._query_looks_contextual(query):
+            return f"{context_clues[0]} {query}"
+
+        recent_context = context_clues[0]
+        recent_terms = [term for term in self.repository.build_query_terms(recent_context) if len(term) >= 2]
+        if not recent_terms:
+            return None
+
+        query_terms = set(self.repository.build_query_terms(query))
+        bridge_terms = [term for term in recent_terms if term not in query_terms]
+        if not bridge_terms:
+            return None
+        return f"{query} {' '.join(bridge_terms[:4])}"
+
+    def _query_looks_contextual(self, query: str) -> bool:
+        normalized = " ".join(query.split()).lower()
+        if len(normalized) <= 14:
+            return True
+        return any(term in normalized for term in FOLLOW_UP_QUERY_TERMS)
+
+    def _hit_haystack(self, item: dict) -> str:
+        return (
+            f"{item['source_title']} "
+            f"{item.get('location_label', '')} "
+            f"{item.get('excerpt', '')} "
+            f"{item.get('normalized_text', '')}"
+        ).lower()
+
+    def _hit_title_matches_terms(self, item: dict, strong_terms: list[str]) -> bool:
+        if not strong_terms:
+            return False
+        title = item["source_title"].lower()
+        return any(term in title for term in strong_terms[:8])
+
+    def _hit_field_like_section(self, item: dict) -> bool:
+        field_haystack = f"{item.get('location_label', '')} {item.get('excerpt', '')}".lower()
+        return any(label in field_haystack for label in FIELD_LABEL_HINTS)
