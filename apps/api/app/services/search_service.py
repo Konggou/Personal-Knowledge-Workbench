@@ -289,8 +289,9 @@ class SearchService:
         return scored[:limit]
 
     def _retrieve_ranked_hits(self, *, project_id: str, query: str, limit: int) -> list[dict]:
+        available_chunks = self.repository.get_latest_chunks_for_project(project_id)
         lexical_results = self._score_chunks(
-            chunks=self.repository.get_latest_chunks_for_project(project_id),
+            chunks=available_chunks,
             query=query,
             limit=limit,
         )
@@ -299,9 +300,15 @@ class SearchService:
             project_id=project_id,
             limit=limit,
         )
-        return self._merge_ranked_hits(
+        merged = self._merge_ranked_hits(
             semantic_results=semantic_results,
             lexical_results=lexical_results,
+            limit=limit,
+        )
+        return self._expand_structured_hits(
+            query=query,
+            hits=merged,
+            available_chunks=available_chunks,
             limit=limit,
         )
 
@@ -353,6 +360,113 @@ class SearchService:
                 existing["normalized_text"] = item["normalized_text"]
         ranked = sorted(merged.values(), key=lambda item: item["relevance_score"], reverse=True)
         return ranked[:limit]
+
+    def _expand_structured_hits(
+        self,
+        *,
+        query: str,
+        hits: list[dict],
+        available_chunks: list[dict],
+        limit: int,
+    ) -> list[dict]:
+        if not hits:
+            return hits
+
+        expanded: dict[str, dict] = {item["chunk_id"]: dict(item) for item in hits}
+        for anchor in hits[: min(4, len(hits))]:
+            for candidate in self._collect_structured_body_candidates(
+                query=query,
+                anchor=anchor,
+                available_chunks=available_chunks,
+            ):
+                existing = expanded.get(candidate["chunk_id"])
+                if existing is None or float(candidate["relevance_score"]) > float(existing["relevance_score"]):
+                    expanded[candidate["chunk_id"]] = candidate
+
+        ranked = sorted(expanded.values(), key=lambda item: item["relevance_score"], reverse=True)
+        return ranked[:limit]
+
+    def _collect_structured_body_candidates(
+        self,
+        *,
+        query: str,
+        anchor: dict,
+        available_chunks: list[dict],
+    ) -> list[dict]:
+        anchor_type = anchor.get("section_type")
+        anchor_heading = anchor.get("heading_path")
+        if anchor_type == "heading" and not anchor_heading:
+            anchor_heading = anchor.get("normalized_text")
+
+        if anchor_type not in {"heading", "field"}:
+            return []
+        if anchor_type == "field" and not anchor_heading:
+            return []
+
+        candidates: list[dict] = []
+        for chunk in available_chunks:
+            if chunk["source_id"] != anchor["source_id"]:
+                continue
+            if chunk["chunk_id"] == anchor["chunk_id"]:
+                continue
+            if chunk.get("section_type") != "body":
+                continue
+            if anchor_heading and chunk.get("heading_path") != anchor_heading:
+                continue
+
+            score = self._hierarchical_body_score(query=query, anchor=anchor, chunk=chunk)
+            if score <= 0:
+                continue
+            candidates.append(self._chunk_row_to_result(chunk=chunk, relevance_score=score))
+
+        candidates.sort(key=lambda item: item["relevance_score"], reverse=True)
+        return candidates[:2]
+
+    def _hierarchical_body_score(self, *, query: str, anchor: dict, chunk: dict) -> float:
+        normalized_query = " ".join(query.split()).lower()
+        terms = [term for term in self.repository.build_query_terms(query) if len(term) >= 2]
+        heading_path = (chunk.get("heading_path") or "").lower()
+        normalized_text = chunk["normalized_text"].lower()
+        score = 0.0
+
+        if heading_path:
+            if heading_path in normalized_query:
+                score += 1.4
+            score += 0.35 * sum(1 for term in terms if term in heading_path)
+
+        score += 0.2 * sum(1 for term in terms if term in normalized_text)
+
+        anchor_type = anchor.get("section_type")
+        anchor_score = float(anchor.get("relevance_score", 0.0))
+        if anchor_type == "heading":
+            score += max(anchor_score * 0.72, 1.8)
+        elif anchor_type == "field":
+            score += max(anchor_score * 0.58, 1.2)
+
+        if self._query_seeks_field_answer(query) and heading_path:
+            score += 0.35
+
+        return round(score, 3)
+
+    def _chunk_row_to_result(self, *, chunk: dict, relevance_score: float) -> dict:
+        return {
+            "project_id": chunk["project_id"],
+            "project_name": chunk["project_name"],
+            "chunk_id": chunk["chunk_id"],
+            "source_id": chunk["source_id"],
+            "source_title": chunk["source_title"],
+            "source_type": chunk["source_type"],
+            "canonical_uri": chunk["canonical_uri"],
+            "location_label": f"{chunk['section_label']} #{chunk['chunk_index'] + 1}",
+            "excerpt": chunk["excerpt"],
+            "relevance_score": round(float(relevance_score), 3),
+            "normalized_text": chunk["normalized_text"],
+            "section_type": chunk.get("section_type", "body"),
+            "heading_path": chunk.get("heading_path"),
+            "field_label": chunk.get("field_label"),
+            "table_origin": chunk.get("table_origin"),
+            "proposition_type": chunk.get("proposition_type"),
+        }
 
     def _should_retry_with_hyde(
         self,

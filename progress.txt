@@ -378,3 +378,17 @@ Remaining V2.2 Work
 - proposition chunk generation
 - stronger PDF layout reconstruction
 - lightweight hierarchical retrieval over summary/title blocks
+
+Completed Feature Slice
+- Implemented the second V2.2 retrieval slice:
+  - structured heading/field hits can now drill down into sibling body chunks under the same section
+  - section-style questions are less likely to stop at a bare heading chunk when richer body evidence exists
+  - unscoped field hits are explicitly prevented from dragging unrelated body paragraphs into the result set
+- Added backend regression coverage for:
+  - heading-hit -> body-drill-down retrieval
+  - guarding against unscoped field hits pulling unrelated body chunks
+
+Verified
+- Backend pytest passed after V2.2 lightweight hierarchical retrieval:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
+  - 26 tests passed

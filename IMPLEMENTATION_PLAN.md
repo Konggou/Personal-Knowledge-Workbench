@@ -331,3 +331,19 @@
   - richer hierarchical retrieval over chapter summaries
   - stronger PDF layout reconstruction
   - schema-preserving migrations for old local state
+
+## 11. V2.2 Second Slice - Lightweight Hierarchical Retrieval
+
+- Scope completed in this slice:
+  - project retrieval now performs lightweight structured drill-down after heading/field hits
+  - heading hits can expand into sibling body chunks under the same `heading_path`
+  - field hits only expand into body chunks when the field is already scoped by a heading path
+  - this keeps field answers precise while letting section-style questions retrieve richer body detail
+- Current design boundaries:
+  - no new public API fields
+  - no frontend terminology changes
+  - no full chapter-summary retrieval layer yet
+- Still deferred after this slice:
+  - proposition-level retrieval
+  - richer summary-block / chapter-block hierarchy
+  - stronger PDF structural reconstruction

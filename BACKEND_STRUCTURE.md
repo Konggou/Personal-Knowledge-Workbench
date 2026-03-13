@@ -332,3 +332,7 @@ Qdrant 是默认向量索引层。
 - `SearchService` now treats field chunks and heading paths as first-class lexical signals.
 - `VectorStore` payloads now persist the same metadata so semantic hits can be merged back with structured context.
 - `proposition_type` is intentionally reserved for the later proposition-chunk phase and is not populated yet in V2.2 first slice.
+- `SearchService` now also performs a lightweight hierarchical expansion step:
+  - anchor hits from headings can pull in sibling body chunks under the same `heading_path`
+  - field hits only expand when they already belong to a scoped heading path
+  - this is intentionally a light retrieval repair layer, not a full chapter-summary hierarchy

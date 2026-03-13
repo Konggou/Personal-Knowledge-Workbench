@@ -500,6 +500,123 @@ def test_search_service_collects_retrieval_diagnostics_for_field_hits(monkeypatc
     assert diagnostics["final"]["grounded_candidate"] is True
 
 
+def test_search_service_expands_heading_hits_into_section_body(monkeypatch):
+    service = SearchService(llm_service=sessions_route_service.llm)
+    available_chunks = [
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-heading",
+            "source_id": "source-1",
+            "section_label": "Implementation Plan",
+            "section_type": "heading",
+            "heading_path": "Implementation Plan",
+            "field_label": None,
+            "table_origin": None,
+            "proposition_type": None,
+            "chunk_index": 0,
+            "normalized_text": "Implementation Plan",
+            "excerpt": "Implementation Plan",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "quality_level": "normal",
+        },
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-body",
+            "source_id": "source-1",
+            "section_label": "Implementation Plan",
+            "section_type": "body",
+            "heading_path": "Implementation Plan",
+            "field_label": None,
+            "table_origin": None,
+            "proposition_type": None,
+            "chunk_index": 1,
+            "normalized_text": "The implementation plan includes sensing, control, and dashboard modules.",
+            "excerpt": "The implementation plan includes sensing, control, and dashboard modules.",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "quality_level": "normal",
+        },
+    ]
+
+    monkeypatch.setattr(service.repository, "get_latest_chunks_for_project", lambda project_id: available_chunks)
+    monkeypatch.setattr(service.vector_store, "search", lambda **kwargs: [])
+    monkeypatch.setattr(service.llm, "generate_hypothetical_passage", lambda **kwargs: None)
+
+    results = service.retrieve_project_evidence(
+        "project-1",
+        "What is the implementation plan?",
+        limit=3,
+        apply_rerank=False,
+    )
+
+    assert results[0]["chunk_id"] == "chunk-body"
+    assert results[0]["section_type"] == "body"
+    assert "sensing, control, and dashboard modules" in results[0]["normalized_text"]
+
+
+def test_search_service_does_not_expand_unscoped_field_hits_into_unrelated_body_chunks(monkeypatch):
+    service = SearchService(llm_service=sessions_route_service.llm)
+    available_chunks = [
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-field",
+            "source_id": "source-1",
+            "section_label": "Project Name",
+            "section_type": "field",
+            "heading_path": None,
+            "field_label": "Project Name",
+            "table_origin": "table_row_1",
+            "proposition_type": None,
+            "chunk_index": 0,
+            "normalized_text": "Project Name: Quest 3 Teleoperation System",
+            "excerpt": "Project Name: Quest 3 Teleoperation System",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "quality_level": "normal",
+        },
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-body",
+            "source_id": "source-1",
+            "section_label": "body",
+            "section_type": "body",
+            "heading_path": None,
+            "field_label": None,
+            "table_origin": None,
+            "proposition_type": None,
+            "chunk_index": 1,
+            "normalized_text": "This body paragraph describes implementation details only.",
+            "excerpt": "This body paragraph describes implementation details only.",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "quality_level": "normal",
+        },
+    ]
+
+    monkeypatch.setattr(service.repository, "get_latest_chunks_for_project", lambda project_id: available_chunks)
+    monkeypatch.setattr(service.vector_store, "search", lambda **kwargs: [])
+    monkeypatch.setattr(service.llm, "generate_hypothetical_passage", lambda **kwargs: None)
+
+    results = service.retrieve_project_evidence(
+        "project-1",
+        "Project Name",
+        limit=3,
+        apply_rerank=False,
+    )
+
+    assert results[0]["chunk_id"] == "chunk-field"
+    assert all(item["chunk_id"] != "chunk-body" for item in results)
+
+
 def test_grounded_generation_stores_latest_retrieval_diagnostics(monkeypatch):
     grounded_generation = sessions_route_service.grounded_generation
     evidence = [
