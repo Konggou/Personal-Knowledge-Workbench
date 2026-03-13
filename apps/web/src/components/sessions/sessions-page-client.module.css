@@ -1,0 +1,92 @@
+.layout {
+  display: grid;
+  gap: 20px;
+}
+
+.groupCard,
+.emptyState {
+  border: 1px solid var(--border-subtle);
+  border-radius: 24px;
+  background: rgba(255, 252, 247, 0.9);
+  box-shadow: var(--shadow-soft);
+}
+
+.groupCard {
+  padding: 24px;
+}
+
+.groupHeader,
+.sessionCard,
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 24px;
+}
+
+.groupMeta {
+  margin: 8px 0 0;
+  color: var(--text-tertiary);
+}
+
+.groupLink,
+.actions button {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sessionList {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.sessionCard {
+  padding: 16px 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  background: var(--bg-elevated);
+}
+
+.sessionLink {
+  display: grid;
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.sessionLink span {
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.actions {
+  flex-wrap: wrap;
+}
+
+.emptyState {
+  padding: 24px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 760px) {
+  .groupHeader,
+  .sessionCard {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions {
+    justify-content: flex-start;
+  }
+}

@@ -1,0 +1,368 @@
+from app.api.routes.sessions import service as sessions_route_service
+from app.services.llm_service import LLMService
+from app.services.search_service import SearchService
+
+
+def _create_project(client, *, name: str = "Grounded Project") -> dict:
+    response = client.post(
+        "/api/v1/projects",
+        json={
+            "name": name,
+            "description": "Grounded RAG verification project",
+            "default_external_policy": "allow_external",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["item"]
+
+
+def _create_session(client, project_id: str) -> dict:
+    response = client.post(f"/api/v1/projects/{project_id}/sessions")
+    assert response.status_code == 201, response.text
+    return response.json()["item"]
+
+
+def _create_html_source(html_server: dict, filename: str, body: str) -> str:
+    path = html_server["root"] / filename
+    path.write_text(body, encoding="utf-8")
+    return f"{html_server['base_url']}/{filename}"
+
+
+def _sample_evidence(source: dict, *, count: int = 1) -> list[dict]:
+    return [
+        {
+            "project_id": source["project_id"],
+            "project_name": "Grounded Project",
+            "chunk_id": None,
+            "source_id": source["id"],
+            "source_title": source["title"],
+            "source_type": source["source_type"],
+            "canonical_uri": source["canonical_uri"],
+            "location_label": f"Projects #{index + 1}",
+            "excerpt": f"Quest 3 ships with Touch Plus controllers by default. Variant {index + 1}.",
+            "relevance_score": round(4.2 - (index * 0.1), 3),
+        }
+        for index in range(count)
+    ]
+
+
+def test_grounded_message_uses_llm_markdown_and_final_sources_only(client, monkeypatch, html_server):
+    project = _create_project(client)
+    session = _create_session(client, project["id"])
+    source_url = _create_html_source(
+        html_server,
+        "grounded-source.html",
+        "<html><head><title>Quest 3 Notes</title></head><body><p>Quest 3 ships with Touch Plus controllers by default.</p></body></html>",
+    )
+    source = client.post(f"/api/v1/projects/{project['id']}/sources/web", json={"url": source_url}).json()["item"]
+    evidence = _sample_evidence(source)
+
+    monkeypatch.setattr(
+        sessions_route_service.search,
+        "retrieve_project_evidence",
+        lambda project_id, query, limit=3, apply_rerank=False: evidence,
+    )
+    monkeypatch.setattr(
+        sessions_route_service.llm,
+        "generate_grounded_reply",
+        lambda **kwargs: {
+            "answer_md": "Quest 3 默认配套的是 **Touch Plus** 手柄。",
+            "used_general_knowledge": True,
+            "evidence_status": "grounded",
+        },
+    )
+
+    response = client.post(
+        f"/api/v1/sessions/{session['id']}/messages",
+        json={"content": "我用的是哪个手柄？", "deep_research": False},
+    )
+    assert response.status_code == 200, response.text
+    detail = response.json()["item"]
+    answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
+
+    assert answer["content_md"] == "Quest 3 默认配套的是 **Touch Plus** 手柄。"
+    assert answer["title"] is None
+    assert answer["source_mode"] == "project_grounded"
+    assert answer["evidence_status"] == "grounded"
+    assert answer["disclosure_note"]
+    assert len(answer["sources"]) == 1
+    assert answer["sources"][0]["source_title"] == source["title"]
+
+
+def test_grounded_complex_query_enables_v1_rerank(client, monkeypatch, html_server):
+    project = _create_project(client, name="Complex Query Project")
+    session = _create_session(client, project["id"])
+    captured: dict[str, bool] = {}
+    source_url = _create_html_source(
+        html_server,
+        "complex-source.html",
+        "<html><head><title>Quest 3 Notes</title></head><body><p>Quest 3 ships with Touch Plus controllers by default.</p></body></html>",
+    )
+    source = client.post(f"/api/v1/projects/{project['id']}/sources/web", json={"url": source_url}).json()["item"]
+
+    def fake_retrieve(project_id, query, limit=3, apply_rerank=False):
+        captured["apply_rerank"] = apply_rerank
+        return _sample_evidence(source)
+
+    monkeypatch.setattr(sessions_route_service.search, "retrieve_project_evidence", fake_retrieve)
+    monkeypatch.setattr(
+        sessions_route_service.llm,
+        "generate_grounded_reply",
+        lambda **kwargs: {
+            "answer_md": "这里是基于证据整理后的回答。",
+            "used_general_knowledge": False,
+            "evidence_status": "grounded",
+        },
+    )
+
+    response = client.post(
+        f"/api/v1/sessions/{session['id']}/messages",
+        json={"content": "请比较不同方案的优缺点并总结为什么这样推荐。", "deep_research": False},
+    )
+    assert response.status_code == 200, response.text
+    detail = response.json()["item"]
+    assert captured["apply_rerank"] is True
+    assert all(item["message_type"] != "status_card" for item in detail["messages"])
+    answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
+    assert answer["title"] is None
+
+
+def test_explicit_deep_research_always_reranks_and_uses_five_evidences(client, monkeypatch, html_server):
+    project = _create_project(client, name="Deep Research Budget")
+    session = _create_session(client, project["id"])
+    captured: dict[str, int | bool] = {}
+    source_url = _create_html_source(
+        html_server,
+        "deep-research-source.html",
+        "<html><head><title>Quest 3 Notes</title></head><body><p>Quest 3 ships with Touch Plus controllers by default.</p></body></html>",
+    )
+    source = client.post(f"/api/v1/projects/{project['id']}/sources/web", json={"url": source_url}).json()["item"]
+
+    def fake_retrieve(project_id, query, limit=3, apply_rerank=False):
+        captured["limit"] = limit
+        captured["apply_rerank"] = apply_rerank
+        return _sample_evidence(source, count=5)
+
+    monkeypatch.setattr(sessions_route_service.search, "retrieve_project_evidence", fake_retrieve)
+    monkeypatch.setattr(
+        sessions_route_service.llm,
+        "generate_grounded_reply",
+        lambda **kwargs: {
+            "answer_md": "这是显式深度调研生成的结论。",
+            "used_general_knowledge": False,
+            "evidence_status": "grounded",
+        },
+    )
+
+    response = client.post(
+        f"/api/v1/sessions/{session['id']}/messages",
+        json={"content": "请做一次深度调研。", "deep_research": True},
+    )
+    assert response.status_code == 200, response.text
+    detail = response.json()["item"]
+
+    assert captured == {"limit": 5, "apply_rerank": True}
+    answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
+    assert answer["title"] == "调研结论"
+    assert len(answer["sources"]) == 5
+    assert any(item["message_type"] == "status_card" and item["title"] == "调研中" for item in detail["messages"])
+    assert any(item["message_type"] == "status_card" and item["title"] == "调研完成" for item in detail["messages"])
+
+
+def test_grounded_stream_returns_llm_generated_markdown_and_metadata(client, monkeypatch, html_server):
+    project = _create_project(client, name="Grounded Stream Project")
+    session = _create_session(client, project["id"])
+    source_url = _create_html_source(
+        html_server,
+        "stream-grounded-source.html",
+        "<html><head><title>Quest 3 Notes</title></head><body><p>Quest 3 ships with Touch Plus controllers by default.</p></body></html>",
+    )
+    source = client.post(f"/api/v1/projects/{project['id']}/sources/web", json={"url": source_url}).json()["item"]
+    evidence = _sample_evidence(source)
+
+    monkeypatch.setattr(
+        sessions_route_service.search,
+        "retrieve_project_evidence",
+        lambda project_id, query, limit=3, apply_rerank=False: evidence,
+    )
+
+    def fake_stream_grounded_reply(**kwargs):
+        yield "Quest 3 默认配套的是 "
+        yield "**Touch Plus** 手柄。"
+        return {
+            "answer_md": "Quest 3 默认配套的是 **Touch Plus** 手柄。",
+            "used_general_knowledge": False,
+            "evidence_status": "grounded",
+        }
+
+    monkeypatch.setattr(sessions_route_service.llm, "stream_grounded_reply", fake_stream_grounded_reply)
+
+    response = client.post(
+        f"/api/v1/sessions/{session['id']}/messages/stream",
+        json={"content": "我用的是哪个手柄？", "deep_research": False},
+    )
+    assert response.status_code == 200, response.text
+    assert "event: delta" in response.text
+    assert "**Touch Plus** 手柄" in response.text
+    assert '"source_mode": "project_grounded"' in response.text
+    assert '"source_title": "Quest 3 Notes"' in response.text
+
+
+def test_grounded_stream_partial_failure_keeps_partial_output_and_appends_tail_note(client, monkeypatch, html_server):
+    project = _create_project(client, name="Grounded Partial Failure")
+    session = _create_session(client, project["id"])
+    source_url = _create_html_source(
+        html_server,
+        "partial-failure-source.html",
+        "<html><head><title>Quest 3 Notes</title></head><body><p>Quest 3 ships with Touch Plus controllers by default.</p></body></html>",
+    )
+    source = client.post(f"/api/v1/projects/{project['id']}/sources/web", json={"url": source_url}).json()["item"]
+    evidence = _sample_evidence(source)
+
+    monkeypatch.setattr(
+        sessions_route_service.search,
+        "retrieve_project_evidence",
+        lambda project_id, query, limit=3, apply_rerank=False: evidence,
+    )
+
+    def fake_stream_grounded_reply(**kwargs):
+        yield "Quest 3 默认配套的是 "
+        raise RuntimeError("stream interrupted")
+
+    monkeypatch.setattr(sessions_route_service.llm, "stream_grounded_reply", fake_stream_grounded_reply)
+
+    response = client.post(
+        f"/api/v1/sessions/{session['id']}/messages/stream",
+        json={"content": "我用的是哪个手柄？", "deep_research": False},
+    )
+    assert response.status_code == 200, response.text
+    assert "Quest 3 默认配套的是 " in response.text
+    assert "本次基于项目资料的生成在中途被中断" in response.text
+    assert "event: done" in response.text
+
+    detail = client.get(f"/api/v1/sessions/{session['id']}").json()["item"]
+    answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
+    assert "Quest 3 默认配套的是" in answer["content_md"]
+    assert "本次基于项目资料的生成在中途被中断" in answer["content_md"]
+    assert len(answer["sources"]) == 1
+
+
+def test_grounded_json_parser_falls_back_to_markdown():
+    service = LLMService()
+    parsed = service.parse_grounded_reply("## 普通 markdown\n\n直接降级展示。")
+
+    assert parsed["answer_md"].startswith("## 普通 markdown")
+    assert parsed["used_general_knowledge"] is False
+    assert parsed["evidence_status"] == "grounded"
+
+
+def test_grounded_json_parser_normalizes_inline_numbered_list():
+    service = LLMService()
+    parsed = service.parse_grounded_reply(
+        '{"answer_md":"1. 第一项 2. 第二项 3. 第三项","used_general_knowledge":false,"evidence_status":"grounded"}'
+    )
+
+    assert parsed["answer_md"] == "1. 第一项\n2. 第二项\n3. 第三项"
+
+
+def test_search_service_uses_conditional_hyde_when_first_pass_is_weak(monkeypatch):
+    service = SearchService(llm_service=sessions_route_service.llm)
+    calls: list[str] = []
+
+    weak_hits = [
+        {
+            "chunk_id": "chunk-1",
+            "source_id": "source-1",
+            "source_title": "开题报告-刘艺.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "正文 #1",
+            "excerpt": "这是开题报告的部分说明。",
+            "normalized_text": "这是开题报告的部分说明。",
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "relevance_score": 0.9,
+            "quality_level": "normal",
+        }
+    ]
+    strong_hits = [
+        {
+            "chunk_id": "chunk-2",
+            "source_id": "source-1",
+            "source_title": "开题报告-刘艺.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "课题名称 #1",
+            "excerpt": "课题名称：基于STM32的室内空气质量检测与智能控制系统设计。",
+            "normalized_text": "课题名称：基于STM32的室内空气质量检测与智能控制系统设计。",
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "relevance_score": 3.8,
+            "quality_level": "normal",
+        }
+    ]
+
+    def fake_retrieve_ranked_hits(*, project_id, query, limit):
+        calls.append(query)
+        if len(calls) == 1:
+            return weak_hits
+        return strong_hits
+
+    monkeypatch.setattr(service, "_retrieve_ranked_hits", fake_retrieve_ranked_hits)
+    monkeypatch.setattr(service.llm, "generate_hypothetical_passage", lambda **kwargs: "开题报告 课题名称 项目名称 题目")
+
+    results = service.retrieve_project_evidence(
+        "project-1",
+        "现在你知道我的题目是什么了吗",
+        limit=3,
+        apply_rerank=False,
+    )
+
+    assert len(calls) >= 2
+    assert any("开题报告" in query for query in calls[1:])
+    assert results[0]["excerpt"].startswith("课题名称：")
+
+
+def test_search_service_skips_hyde_when_first_pass_is_already_strong(monkeypatch):
+    service = SearchService(llm_service=sessions_route_service.llm)
+    calls: list[str] = []
+    strong_hits = [
+        {
+            "chunk_id": "chunk-2",
+            "source_id": "source-1",
+            "source_title": "开题报告-刘艺.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "课题名称 #1",
+            "excerpt": "课题名称：基于STM32的室内空气质量检测与智能控制系统设计。",
+            "normalized_text": "课题名称：基于STM32的室内空气质量检测与智能控制系统设计。",
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "relevance_score": 4.6,
+            "quality_level": "normal",
+        }
+    ]
+
+    def fake_retrieve_ranked_hits(*, project_id, query, limit):
+        calls.append(query)
+        return strong_hits
+
+    hyde_called = {"value": False}
+
+    def fake_hyde(**kwargs):
+        hyde_called["value"] = True
+        return "不该触发"
+
+    monkeypatch.setattr(service, "_retrieve_ranked_hits", fake_retrieve_ranked_hits)
+    monkeypatch.setattr(service.llm, "generate_hypothetical_passage", fake_hyde)
+
+    results = service.retrieve_project_evidence(
+        "project-1",
+        "我的开题报告题目是什么",
+        limit=3,
+        apply_rerank=False,
+    )
+
+    assert calls == ["我的开题报告题目是什么"]
+    assert hyde_called["value"] is False
+    assert results == strong_hits

@@ -1,0 +1,261 @@
+.page {
+  display: grid;
+  gap: 20px;
+}
+
+.errorBanner {
+  padding: 14px 16px;
+  border: 1px solid rgba(171, 69, 69, 0.18);
+  border-radius: 16px;
+  background: rgba(171, 69, 69, 0.08);
+  color: #7b2f2f;
+  line-height: 1.6;
+}
+
+.filters,
+.groupCard,
+.emptyState,
+.chunkCard {
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 252, 247, 0.9);
+}
+
+.filters,
+.groupCard,
+.drawer {
+  border-radius: 24px;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 220px minmax(170px, auto) 120px;
+  gap: 12px;
+  padding: 18px;
+}
+
+.filters input,
+.filters select,
+.webForm input,
+.webForm button,
+.filters button,
+.groupActions button,
+.sourceActions button,
+.previewFooter button,
+.fileButton {
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  padding: 0 14px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+}
+
+.archiveToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.archiveToggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.groups {
+  display: grid;
+  gap: 16px;
+}
+
+.groupCard {
+  padding: 22px;
+  box-shadow: var(--shadow-soft);
+}
+
+.groupHeader,
+.groupActions,
+.sourceCard,
+.sourceActions,
+.previewHeader,
+.previewFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 24px;
+}
+
+.groupMeta,
+.previewEyebrow,
+.previewLink,
+.sourceMain span,
+.sourceMain em,
+.chunkCard p,
+.emptyState {
+  color: var(--text-secondary);
+}
+
+.previewEyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.groupActions,
+.sourceActions {
+  flex-wrap: wrap;
+}
+
+.fileButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.webForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.sourceList,
+.previewChunks {
+  display: grid;
+  gap: 12px;
+}
+
+.sourceList {
+  margin-top: 18px;
+}
+
+.sourceCard {
+  align-items: flex-start;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  background: var(--bg-elevated);
+}
+
+.sourceMain {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sourceMain em {
+  font-style: normal;
+  line-height: 1.5;
+}
+
+.drawer {
+  position: sticky;
+  top: 96px;
+  height: fit-content;
+  min-height: 360px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 252, 247, 0.96);
+  box-shadow: var(--shadow-soft);
+}
+
+.drawerHidden {
+  opacity: 0.4;
+}
+
+.previewPanel {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+}
+
+.previewHeader h3 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.previewHeader button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 14px;
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+}
+
+.previewLink {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chunkCard {
+  padding: 14px;
+  border-radius: 18px;
+}
+
+.chunkCard p {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+}
+
+.previewFooter {
+  align-items: center;
+}
+
+.previewFooter button {
+  border: 0;
+  background: var(--accent-primary);
+  color: white;
+}
+
+.emptyState {
+  padding: 24px;
+  border-radius: 24px;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .drawer {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .groupHeader,
+  .sourceCard,
+  .previewHeader,
+  .previewFooter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

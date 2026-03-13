@@ -1,0 +1,30 @@
+# Node / frontend
+node_modules/
+.next/
+.next-e2e/
+out/
+test-results/
+*.tsbuildinfo
+
+# Python / backend
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+
+# Local data
+data/
+!data/.gitkeep
+.env
+.env.local
+
+# Logs / temp
+logs/
+tmp/
+tmp_pua_repo/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,330 @@
+﻿Personal Knowledge Workbench v1 Progress
+Last Updated: 2026-03-13
+
+Read This First
+- Every new AI session should read this file first.
+- Product truth lives in: PRD.md, APP_FLOW.md, TECH_STACK.md, FRONTEND_GUIDELINES.md, BACKEND_STRUCTURE.md, IMPLEMENTATION_PLAN.md, AGENTS.md.
+- Current public app structure is chat-first, not task-first.
+
+Current Status
+- v1 chat-first restructuring is complete and usable.
+- grounded Q&A now follows a generated RAG path instead of directly surfacing retrieved excerpts.
+- Project chat page has been upgraded from a multi-card workbench to an integrated chat-first layout.
+- Public frontend routes are now:
+  - /workspace
+  - /sessions
+  - /knowledge
+  - /projects/[projectId]
+  - /projects/[projectId]?sessionId=...
+- Old frontend routes are removed:
+  - /tasks
+  - /search
+  - /assets
+  - dedicated project task detail page
+- Public backend API is now centered on:
+  - /api/v1/projects
+  - /api/v1/sessions
+  - /api/v1/knowledge
+  - /api/v1/sources
+- Frontend main mental model is now:
+  - project = knowledge container
+  - session = project chat thread
+  - message = primary interaction unit
+  - source = lightweight evidence layer
+
+Completed
+- Rebuilt SQLite schema around:
+  - _app_metadata
+  - projects
+  - project_snapshots
+  - sources
+  - source_chunks
+  - source_chunk_fts
+  - sessions
+  - session_messages
+  - message_sources
+- Added schema-version-based local state reset for chat-first v1
+- Kept embedded Qdrant as the default vector backend
+- Preserved hybrid retrieval:
+  - SQLite lexical recall
+  - Qdrant semantic recall
+  - merged ranking
+- Replaced public backend semantics:
+  - old task/search/asset-first API retired from router
+  - new sessions + knowledge routes exposed
+- Implemented session APIs:
+  - GET /api/v1/sessions
+  - GET /api/v1/projects/{project_id}/sessions
+  - POST /api/v1/projects/{project_id}/sessions
+  - GET /api/v1/sessions/{session_id}
+  - PATCH /api/v1/sessions/{session_id}
+  - DELETE /api/v1/sessions/{session_id}
+  - POST /api/v1/sessions/{session_id}/messages
+  - POST /api/v1/sessions/{session_id}/summary
+  - POST /api/v1/sessions/{session_id}/report
+  - DELETE /api/v1/messages/{message_id}
+  - GET /api/v1/sessions/{session_id}/events
+- Implemented knowledge API:
+  - GET /api/v1/knowledge
+- Extended source APIs:
+  - project-scoped source listing
+  - web/file source creation
+  - source preview
+  - web URL update
+  - refresh
+  - archive
+  - restore
+  - delete
+- Implemented chat-first frontend pages:
+  - /workspace
+  - /sessions
+  - /knowledge
+  - /projects/[projectId]
+- Rebuilt project page as:
+  - light top navigation
+  - left project-tree sidebar
+  - dominant center chat thread
+  - overlay source preview instead of permanent right column
+- Implemented project empty state:
+  - no auto-open when sessionId is absent
+  - New Session
+  - Go to Knowledge
+- Implemented weak-source-mode banner for chat without indexed project sources
+- Implemented session title auto-generation from first user message
+- Implemented deep-research toggle that stays in the same session
+- Implemented in-chat status cards:
+  - 调研中
+  - 调研完成
+- Implemented in-chat source update cards after source import from chat
+- Implemented source bubble UX:
+  - source count bubble
+  - inline title list
+  - right drawer detailed preview
+- Implemented result cards inside chat:
+  - summary card
+  - report card
+  - copy
+  - soft delete
+- Implemented current-project knowledge drawer
+- Implemented global knowledge page:
+  - grouped by project
+  - search
+  - project filter
+  - preview first
+  - enter chat creates a new session
+- Implemented source lifecycle UI:
+  - archive
+  - restore
+  - delete
+  - refresh (web)
+  - edit URL (web)
+- Updated root docs to match the chat-first product structure:
+  - PRD.md
+  - APP_FLOW.md
+  - TECH_STACK.md
+  - FRONTEND_GUIDELINES.md
+  - BACKEND_STRUCTURE.md
+  - IMPLEMENTATION_PLAN.md
+  - AGENTS.md
+- Reworked the project chat page visual model:
+  - removed the large in-page project header
+  - removed the permanent right knowledge panel
+  - replaced the three-column layout with a true sidebar + main chat layout
+  - made sidebar collapse expand the main chat area
+  - moved project knowledge access to a small entry above the composer
+  - changed assistant content from card-heavy blocks to a lighter prose-first flow
+  - changed the composer into a bottom-docked chat surface
+- Refined the integrated chat layout after visual feedback:
+  - fixed collapsed sidebar controls so the rail no longer shows broken wrapped labels
+  - reduced the visual weight and height of the chat composer
+  - made same-project session switching update immediately instead of feeling unresponsive
+- Fixed remaining root-document mojibake in:
+  - PRD.md
+  - TECH_STACK.md
+  - FRONTEND_GUIDELINES.md
+  - BACKEND_STRUCTURE.md
+  - IMPLEMENTATION_PLAN.md
+  - AGENTS.md
+- Fixed remaining frontend Chinese mojibake in:
+  - workspace page
+  - sessions page
+  - knowledge page
+  - project chat page
+  - top navigation
+- Removed stale public backend/frontend code paths for:
+  - assets
+  - search
+  - tasks
+- Added README.md for startup, routes, stack, and usage overview
+- Fixed file-ingest UX around unsupported Office formats:
+  - file pickers on project chat and knowledge page now explicitly limit selection to PDF and DOCX
+  - unsupported legacy DOC uploads now show a visible error instead of looking like a silent no-op
+  - file inputs now clear after selection so choosing the same file again still triggers upload
+- Upgraded weak-source-mode conversation behavior:
+  - when a session has no grounded project evidence, the backend now keeps the chat going through a generic LLM path instead of always returning a static fallback block
+  - weak-source-mode still remains explicit in metadata, but the reply body can continue as normal conversation
+  - if no LLM is configured, the fallback message now clearly explains the missing model configuration instead of pretending it answered the question
+- Added backend regression coverage for weak-source-mode LLM chat continuation
+- Refined the integrated project chat composer after new UI feedback:
+  - stabilized the in-session file upload trigger by decoupling the hidden file input from the transient add-source menu
+  - reduced the visual weight of the composer and textarea
+  - widened the central chat/composer column and reduced unnecessary side padding
+  - removed the rounded card-like composer shell in favor of a flatter integrated divider-based surface
+- Fixed chat container behavior after desktop usage feedback:
+  - the project sidebar now stays structurally fixed while the chat column owns the page scroll
+  - the composer is now a dedicated bottom layout row instead of an overlay sitting on top of messages
+  - the composer background is visually separated from the transcript so text no longer bleeds into the input zone
+- Added file-based LLM config support:
+  - backend settings now read `.env.local` and `.env` from the repo root
+  - process environment still overrides file values
+  - added `.env.local.example` and a local `.env.local` template for MiniMax-compatible OpenAI settings
+  - fixed the file lookup path so repo-root `.env.local` is actually loaded by the API
+- Refactored grounded answers into a generated RAG flow:
+  - grounded now uses `hybrid retrieval -> conditional rerank -> final evidence selection -> evidence pack -> LLM generation`
+  - ordinary grounded questions keep a final evidence budget of 3
+  - explicit deep research keeps a final evidence budget of 5
+  - complex ordinary questions now only trigger rerank and no longer auto-upgrade to deep research
+  - invalid grounded JSON now falls back to markdown without dropping the reply
+  - partial grounded streams now keep emitted content and append a lightweight interruption note
+- Added a v1 retrieval-quality upgrade pass for project chat:
+  - low-confidence project retrieval can now trigger a conditional HyDE/query-expansion retry instead of immediately falling back to weak-source-mode
+  - the current HyDE trigger is still heuristic-based (`empty / low-score / weak-term-coverage`) and is explicitly a v1 simplification
+  - later upgrades should consider smarter trigger policies based on real query logs, richer retrieval features, or a dedicated lightweight judge
+- Refined ordinary project-answer presentation:
+  - normal assistant answers no longer show visible titles like `通用对话` or `基于当前资料的回答`
+  - ordinary chat markdown now gets light normalization for squeezed numbered lists before rendering
+  - project chat styles now give ordinary answer text, disclosure notes, and source bubbles stronger contrast
+- Added grounded-answer regression coverage for:
+  - ordinary complex grounded questions reranking without auto research
+  - explicit deep research using a 5-evidence budget
+  - grounded stream interruption recovery
+  - frontend grounded streaming placeholder behavior and final source/disclosure mounting
+
+Verified
+- Backend compile check passed:
+  - apps/api/.venv/Scripts/python.exe -m compileall apps/api/app
+- Backend pytest passed:
+  - 18 tests collected
+  - 18 tests passed
+- Frontend typecheck passed:
+  - corepack pnpm --dir apps/web typecheck
+- Frontend vitest passed:
+  - 4 test files
+  - 9 tests passed
+- Frontend build passed:
+  - corepack pnpm --dir apps/web build
+- Playwright E2E passed:
+  - create project -> create session -> add source -> ask -> inspect sources
+  - create summary card + report card inside same session
+  - add source from knowledge page -> preview -> enter chat
+- Composer refinement verification passed:
+  - corepack pnpm --dir apps/web typecheck
+  - corepack pnpm --dir apps/web test -- --run
+  - corepack pnpm --dir apps/web build
+  - corepack pnpm --dir apps/web test:e2e
+- Follow-up UI interaction pass passed:
+  - sidebar collapsed rail renders correctly
+  - lighter composer builds and runs cleanly
+  - session click path still passes end-to-end regression
+- Project layout rebuild passed review-style verification:
+  - sidebar collapse really expands the chat area
+  - no permanent right-side knowledge gap remains on project pages
+  - project page reads as one continuous interface instead of parallel cards
+- Post-cleanup verification passed after removing old task/search/asset remnants
+- UI copy review passed after fixing remaining mojibake
+- Backend weak-source-mode verification passed:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
+  - added regression proving no-evidence chat can continue through the LLM path
+- Frontend source-upload UX verification passed:
+  - corepack pnpm --dir apps/web typecheck
+  - corepack pnpm --dir apps/web test -- --run
+  - corepack pnpm --dir apps/web build
+  - corepack pnpm --dir apps/web test:e2e
+- Chat container verification passed:
+  - corepack pnpm --dir apps/web typecheck
+  - corepack pnpm --dir apps/web build
+  - corepack pnpm --dir apps/web test:e2e
+- File-based config verification passed:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
+  - apps/api/.venv/Scripts/python.exe -c "... get_settings() ..."
+  - verified MiniMax base URL, model, and key presence load from `.env.local`
+
+In Progress
+- Collect real user feedback on the integrated chat-first UI
+- Improve retrieval quality beyond current stable paragraph chunking
+- Decide whether to add real legacy DOC parsing support or keep the product boundary at PDF/DOCX
+
+Next
+- Real usage pass by the user
+- If needed, improve:
+  - semantic/structured chunking
+  - better rerank
+  - richer source preview
+  - tighter in-session streaming experience
+  - clearer model configuration onboarding for weak-source-mode chat
+  - further reduce visual density in the sidebar and message typography if user feedback still points to a Claude/Codex gap
+
+Known Gaps
+- Retrieval quality is solid but still basic compared with a more advanced semantic chunking + rerank pipeline
+- Embedded Qdrant is validated; remote Qdrant server mode still deserves a separate end-to-end validation pass
+- Session event stream is currently replay-oriented, not token-by-token live generation
+- Legacy `.doc` parsing is still not implemented; the app now surfaces this clearly and supports `.pdf` / `.docx`
+
+V1 Simplifications / Later Improvements
+- Ordinary-question rerank still uses a simple length-plus-keyword rule
+- Conditional HyDE triggering still uses a heuristic v1 policy (`empty / low-score / weak-term-coverage`)
+- Chunking is still basic and should later move to stronger semantic / structural chunking
+- Evidence selection does not yet use a dedicated model-based reranker
+- Grounded generation still uses a pragmatic `structured JSON first + markdown fallback` contract
+
+V2 Roadmap Focus
+- Smarter conditional HyDE triggering beyond today’s heuristic thresholds
+- Better Chinese fuzzy-question retrieval and follow-up question handling
+- Stronger document parsing for tables, headings, and field-like structures
+- Richer evaluation and observability around retrieval hit quality and grounded answer usefulness
+
+Working Rules
+- Update this file after every completed feature slice.
+- Run review-style checks before marking a slice complete.
+- Keep terminology aligned with chat-first docs.
+
+Completed Feature Slice
+- Fixed file-based LLM config so the backend no longer freezes `.env.local` at module import time.
+- Fixed weak-source-mode diagnostics:
+  - direct `LLMService` calls now surface real HTTP/request errors instead of always pretending the model is unconfigured
+  - MiniMax-compatible OpenAI calls were verified through the live API path
+  - `<think>` blocks are stripped from model output before messages are shown
+- Moved the active local API chain to port `8010` and aligned startup defaults:
+  - `scripts/start-api.ps1` now starts the API on `8010`
+  - `apps/web/.env.local` and `apps/web/.env.example` point the frontend at `http://127.0.0.1:8010`
+- Added streaming chat delivery for project conversations:
+  - new backend endpoint: `POST /api/v1/sessions/{session_id}/messages/stream`
+  - weak-source-mode now streams MiniMax-compatible output instead of waiting for a full blocking response
+  - frontend now inserts the user message immediately, shows an assistant shell immediately, and appends streamed deltas in place
+  - final session state is refreshed only after successful stream completion, so failed streams do not erase inline error feedback
+- Fixed markdown rendering for assistant-side message content:
+  - assistant answers, status cards, source update cards, summary cards, and report cards now render `content_md` as real markdown
+  - GFM features such as headings, lists, emphasis, links, blockquotes, and fenced code blocks now display with dedicated chat styles instead of plain text paragraphs
+
+Verified
+- Backend compile check passed:
+  - apps/api/.venv/Scripts/python.exe -m compileall apps/api/app
+- Backend pytest passed:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
+- Direct MiniMax-compatible LLM call passed from apps/api:
+  - `LLMService.is_configured()` returned true
+  - direct `generate_chat_reply(...)` returned a non-empty reply
+- Live weak-source-mode API path passed on the clean `8010` chain:
+  - created project -> created session -> sent message with no sources
+  - assistant message returned from the model instead of the old "未配置模型" fallback
+- Frontend dev server on `3000` is online and paired with the new `8010` API chain
+- Streaming verification passed:
+  - raw MiniMax stream inspected and normalized so `<think>` content is suppressed
+  - HTTP stream now emits `delta` events followed by `done`
+  - browser automation confirmed:
+    - user message appears immediately after click
+    - assistant shell appears before the final answer completes
+    - final answer is rendered without waiting for a full-page blocking refresh
+- Markdown rendering verification passed:
+  - frontend typecheck/build passed after adding markdown dependencies
+  - browser automation confirmed a live answer can render as one `h2` plus two list items inside the chat view

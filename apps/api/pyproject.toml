@@ -1,0 +1,27 @@
+[project]
+name = "workbench-api"
+version = "0.1.0"
+description = "Personal Knowledge Workbench API"
+requires-python = "==3.12.*"
+dependencies = [
+  "fastapi==0.135.1",
+  "uvicorn==0.41.0",
+  "pydantic==2.12.5",
+  "sqlmodel==0.0.37",
+  "httpx==0.28.1",
+  "python-multipart==0.0.22",
+  "pypdf==6.8.0",
+  "python-docx==1.2.0",
+  "qdrant-client==1.17.0",
+  "sentence-transformers==5.2.3",
+  "rapidocr-onnxruntime==1.4.4"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.0.2"
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

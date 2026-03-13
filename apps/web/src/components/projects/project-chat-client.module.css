@@ -1,0 +1,874 @@
+.appShellHeader {
+  padding: 12px 24px;
+  background: rgba(246, 243, 238, 0.86);
+}
+
+.appShellMain {
+  padding: 0;
+}
+
+.shell {
+  height: calc(100vh - 73px);
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 252, 247, 0.6), rgba(246, 243, 238, 0.9));
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  height: calc(100vh - 73px);
+  transition: grid-template-columns 0.24s ease;
+}
+
+.layoutCollapsed {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.sidebar {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 14px;
+  border-right: 1px solid rgba(24, 34, 48, 0.08);
+  background: rgba(255, 252, 247, 0.72);
+  padding: 16px 10px 16px 14px;
+  backdrop-filter: blur(14px);
+}
+
+.sidebarCollapsed {
+  padding-right: 8px;
+  padding-left: 8px;
+}
+
+.sidebarTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebarCollapsed .sidebarTop {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.collapseButton,
+.newSessionButton,
+.railActionButton,
+.projectToggleButton,
+.lightAction,
+.sessionItemActions button,
+.sendButton,
+.sourceTitleButton {
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.collapseButton,
+.lightAction,
+.sessionItemActions button,
+.sourceTitleButton {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.collapseButton,
+.railActionButton {
+  min-width: 40px;
+  min-height: 40px;
+  background: rgba(24, 34, 48, 0.04);
+  color: var(--text-primary);
+}
+
+.collapseButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex: 0 0 40px;
+}
+
+.collapseGlyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.newSessionButton,
+.sendButton {
+  min-height: 42px;
+  padding: 0 16px;
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.newSessionButton {
+  flex: 1;
+}
+
+.railActionButton {
+  flex: 1;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.railProjectList,
+.projectTree,
+.sessionList {
+  display: grid;
+  gap: 8px;
+}
+
+.railProjectList {
+  align-content: start;
+  justify-items: center;
+}
+
+.railProjectButton {
+  display: inline-flex;
+  min-width: 48px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.railProjectButtonActive {
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+}
+
+.projectTree {
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.projectSection {
+  display: grid;
+  gap: 10px;
+  border-radius: 16px;
+  padding: 6px;
+}
+
+.projectSectionActive {
+  background: rgba(216, 236, 233, 0.18);
+}
+
+.projectRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.projectButton {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  padding: 6px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.projectBadge {
+  display: inline-flex;
+  min-width: 34px;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(24, 34, 48, 0.05);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.projectMeta {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.projectMeta strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectMeta span,
+.sidebarEmpty,
+.sessionSelect span,
+.weakSourceNotice,
+.composerHint,
+.previewLink,
+.previewChunkCard p {
+  color: var(--text-secondary);
+}
+
+.projectMeta span,
+.sessionSelect span {
+  font-size: 12px;
+}
+
+.projectToggleButton {
+  min-width: 32px;
+  min-height: 32px;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.sessionItem {
+  display: grid;
+  gap: 6px;
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(24, 34, 48, 0.08);
+}
+
+.sessionItemActive {
+  border-left-color: var(--accent-primary);
+}
+
+.sessionSelect {
+  display: grid;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sessionSelect strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.sessionItemActions {
+  display: flex;
+  gap: 6px;
+}
+
+.sessionItemActions button {
+  padding: 0;
+  font-size: 12px;
+}
+
+.chatStage {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chatScroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+}
+
+.chatColumn,
+.composerColumn {
+  width: min(100%, 1040px);
+  margin: 0 auto;
+}
+
+.messageStream {
+  display: grid;
+  gap: 28px;
+  padding-bottom: 32px;
+}
+
+.sessionIntro,
+.emptyContent {
+  width: min(100%, 860px);
+  margin: 0 auto;
+}
+
+.sessionIntro,
+.emptyState {
+  display: grid;
+  place-items: center;
+  flex: 1;
+}
+
+.sessionIntro h1,
+.emptyContent h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(32px, 4vw, 48px);
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+}
+
+.sessionIntro p,
+.emptyContent p {
+  margin: 18px 0 0;
+  max-width: 640px;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.emptyEyebrow {
+  margin: 0 0 10px;
+  color: var(--accent-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.emptyActions {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.emptyActions button,
+.emptyActions a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0 18px;
+  text-decoration: none;
+}
+
+.emptyActions button {
+  border: 0;
+  background: var(--accent-primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+.emptyActions a {
+  border: 1px solid rgba(24, 34, 48, 0.1);
+  color: var(--text-primary);
+}
+
+.userMessageRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.userMessage {
+  max-width: min(72%, 720px);
+  border-radius: 22px;
+  background: rgba(24, 34, 48, 0.06);
+  padding: 18px 20px;
+}
+
+.userMessage p {
+  margin: 0;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.assistantMessage {
+  display: grid;
+  gap: 14px;
+  color: #273241;
+}
+
+.assistantMessage h3,
+.statusCard strong,
+.systemCard strong,
+.previewHeader h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.disclosureNote {
+  margin: -6px 0 0;
+  color: #536273;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.previewChunkCard p {
+  margin: 0;
+  line-height: 1.86;
+  white-space: pre-wrap;
+}
+
+.markdownBody {
+  color: var(--text-primary);
+}
+
+.markdownBody > :first-child {
+  margin-top: 0;
+}
+
+.markdownBody > :last-child {
+  margin-bottom: 0;
+}
+
+.markdownBody p,
+.markdownBody blockquote {
+  margin: 0 0 16px;
+  line-height: 1.92;
+  white-space: pre-wrap;
+}
+
+.markdownBody ul,
+.markdownBody ol {
+  margin: 0 0 18px 24px;
+  padding: 0;
+}
+
+.markdownBody li {
+  margin: 0 0 12px;
+  line-height: 1.92;
+}
+
+.markdownBody li + li {
+  margin-top: 8px;
+}
+
+.markdownBody li > p {
+  margin: 0;
+}
+
+.markdownBody ol li::marker,
+.markdownBody ul li::marker {
+  color: #39485a;
+  font-weight: 600;
+}
+
+.markdownBody h1,
+.markdownBody h2,
+.markdownBody h3,
+.markdownBody h4 {
+  margin: 28px 0 12px;
+  color: var(--text-primary);
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.markdownBody h1 {
+  font-size: 30px;
+}
+
+.markdownBody h2 {
+  font-size: 24px;
+}
+
+.markdownBody h3,
+.markdownBody h4 {
+  font-size: 18px;
+}
+
+.markdownBody strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.markdownBody em {
+  font-style: italic;
+}
+
+.markdownBody code {
+  border-radius: 8px;
+  background: rgba(24, 34, 48, 0.06);
+  padding: 0.12em 0.4em;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.markdownBody pre {
+  overflow-x: auto;
+  margin: 0 0 16px;
+  border: 1px solid rgba(24, 34, 48, 0.08);
+  background: rgba(250, 247, 242, 0.9);
+  padding: 14px 16px;
+}
+
+.markdownBody pre code {
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.markdownBody blockquote {
+  border-left: 2px solid rgba(31, 92, 87, 0.24);
+  padding-left: 14px;
+  color: var(--text-secondary);
+}
+
+.markdownBody a {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.statusCard,
+.systemCard {
+  border-left: 2px solid rgba(31, 92, 87, 0.24);
+  padding-left: 16px;
+}
+
+.resultCard {
+  border-top: 1px solid rgba(24, 34, 48, 0.08);
+  padding-top: 18px;
+}
+
+.messageActions,
+.resultActions {
+  display: flex;
+  gap: 10px;
+}
+
+.sourceBubble {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(24, 34, 48, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 252, 247, 0.82);
+  padding: 8px 12px;
+  color: #273241;
+  font-weight: 600;
+}
+
+.sourceIcons {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 2px;
+}
+
+.sourceFavicon,
+.fileTypeIcon {
+  margin-left: -6px;
+  border: 2px solid rgba(255, 252, 247, 0.9);
+}
+
+.sourceFavicon:first-child,
+.fileTypeIcon:first-child {
+  margin-left: 0;
+}
+
+.sourceFavicon {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.fileTypeIcon {
+  display: inline-flex;
+  min-width: 28px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #eef2f6;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.sourceListInline {
+  display: grid;
+  gap: 8px;
+}
+
+.sourceTitleButton {
+  width: fit-content;
+  padding: 0;
+  text-align: left;
+  color: #3d4d5f;
+}
+
+.composerDock {
+  position: relative;
+  z-index: 12;
+  padding: 0 20px;
+  border-top: 1px solid rgba(24, 34, 48, 0.08);
+  background: rgba(250, 247, 242, 0.98);
+  box-shadow: 0 -8px 24px rgba(16, 24, 40, 0.04);
+}
+
+.composerColumn {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0 12px;
+}
+
+.composerMetaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.knowledgeLink {
+  color: var(--accent-primary);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.weakSourceNotice {
+  font-size: 12px;
+}
+
+.inlineWebForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 10px;
+}
+
+.sourceError {
+  border: 1px solid rgba(180, 35, 24, 0.16);
+  border-radius: 14px;
+  background: rgba(254, 228, 226, 0.7);
+  color: var(--danger-text);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.inlineWebForm input,
+.composerSurface textarea {
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.inlineWebForm input {
+  min-height: 42px;
+  border-radius: 16px;
+  padding: 0 12px;
+}
+
+.inlineWebForm button,
+.sendButton {
+  border: 0;
+}
+
+.inlineWebForm button {
+  border-radius: 18px;
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.composerSurface {
+  border-top: 1px solid rgba(24, 34, 48, 0.08);
+  background: transparent;
+  padding: 6px 0 0;
+}
+
+.composerActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.lightAction {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.lightActionActive {
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+}
+
+.addSourceBox {
+  position: relative;
+}
+
+.addSourceMenu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  display: grid;
+  min-width: 180px;
+  gap: 4px;
+  border: 1px solid rgba(24, 34, 48, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 252, 247, 0.98);
+  padding: 8px;
+  box-shadow: 0 10px 26px rgba(16, 24, 40, 0.1);
+}
+
+.addSourceMenu button,
+.addSourceMenuLabel {
+  min-height: 34px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+}
+
+.addSourceMenuLabel {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.composerSurface textarea {
+  min-height: 56px;
+  resize: none;
+  padding: 10px 0 8px;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.6;
+  outline: none;
+}
+
+.composerBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(24, 34, 48, 0.06);
+}
+
+.composerHint {
+  font-size: 12px;
+}
+
+.sendButton {
+  min-width: 68px;
+  min-height: 34px;
+}
+
+.previewOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(24, 34, 48, 0.18);
+}
+
+.previewSheet {
+  width: min(420px, 100vw);
+  height: 100vh;
+  overflow-y: auto;
+  background: rgba(255, 252, 247, 0.98);
+  border-left: 1px solid rgba(24, 34, 48, 0.08);
+  padding: 24px 20px;
+  box-shadow: -18px 0 40px rgba(16, 24, 40, 0.12);
+}
+
+.previewHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.previewLink {
+  margin: 12px 0 0;
+  word-break: break-word;
+}
+
+.previewChunks {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.previewChunkCard {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(24, 34, 48, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 16px;
+}
+
+.previewFooter {
+  display: flex;
+  margin-top: 22px;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 270px minmax(0, 1fr);
+  }
+
+  .chatScroll,
+  .composerDock {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+@media (max-width: 840px) {
+  .layout,
+  .layoutCollapsed {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .sidebar,
+  .sidebarCollapsed {
+    position: static;
+    min-height: auto;
+    height: auto;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid rgba(24, 34, 48, 0.08);
+    padding: 14px 16px;
+  }
+
+  .sidebarCollapsed .railProjectList {
+    grid-template-columns: repeat(auto-fit, minmax(48px, 48px));
+  }
+
+  .chatStage {
+    min-height: auto;
+    height: auto;
+    overflow: visible;
+  }
+
+  .chatScroll {
+    overflow: visible;
+    padding-top: 20px;
+  }
+
+  .composerDock {
+    position: static;
+    padding-bottom: 20px;
+    background: rgba(250, 247, 242, 0.98);
+    box-shadow: none;
+  }
+
+  .composerBottom,
+  .composerMetaRow,
+  .emptyActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .previewSheet {
+    width: 100vw;
+  }
+}
