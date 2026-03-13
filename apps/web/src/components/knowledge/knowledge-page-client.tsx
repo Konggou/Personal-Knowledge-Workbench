@@ -352,12 +352,16 @@ export function KnowledgePageClient({
               </div>
               <p className={styles.previewLink}>{drawer.item.canonical_uri}</p>
               <div className={styles.previewChunks}>
-                {drawer.item.preview_chunks.map((chunk) => (
-                  <article key={chunk.id} className={styles.chunkCard}>
-                    <strong>{chunk.location_label}</strong>
-                    <p>{chunk.normalized_text}</p>
-                  </article>
-                ))}
+                {drawer.item.preview_chunks.map((chunk) => {
+                  const context = renderPreviewChunkContext(chunk);
+                  return (
+                    <article key={chunk.id} className={styles.chunkCard}>
+                      <strong>{chunk.location_label}</strong>
+                      {context ? <span className={styles.chunkMeta}>{context}</span> : null}
+                      <p>{chunk.normalized_text}</p>
+                    </article>
+                  );
+                })}
               </div>
               <div className={styles.previewFooter}>
                 <button onClick={() => void handleEnterChat(drawer.item.project_id)} type="button">
@@ -383,4 +387,9 @@ function normalizeSourceError(message: string) {
     return "当前仅支持 PDF 和 DOCX 文件，暂不支持旧版 DOC 文件。";
   }
   return message;
+}
+
+function renderPreviewChunkContext(chunk: SourcePreview["preview_chunks"][number]) {
+  const parts = [chunk.heading_path, chunk.field_label].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
 }

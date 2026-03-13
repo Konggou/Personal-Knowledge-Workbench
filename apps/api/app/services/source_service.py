@@ -1,6 +1,7 @@
 from html.parser import HTMLParser
 from io import BytesIO
 from pathlib import Path
+import re
 
 import httpx
 from docx import Document
@@ -85,7 +86,7 @@ class SourceService:
 
         try:
             title, text = self._fetch_web_content(url)
-            chunks = self._build_plain_text_chunks(text)
+            chunks = self._finalize_chunks(self._build_plain_text_chunks(text))
             self._complete_ingestion(
                 source_id=source.id,
                 project_id=project_id,
@@ -181,7 +182,7 @@ class SourceService:
         self.repository.mark_source_processing(source_id)
         try:
             title, text = self._fetch_web_content(source.canonical_uri)
-            chunks = self._build_plain_text_chunks(text)
+            chunks = self._finalize_chunks(self._build_plain_text_chunks(text))
             self._complete_ingestion(
                 source_id=source.id,
                 project_id=source.project_id,
@@ -281,15 +282,16 @@ class SourceService:
     def _extract_pdf_content(self, content: bytes) -> tuple[str, list[dict]]:
         reader = PdfReader(BytesIO(content))
         pages: list[str] = []
-        for page in reader.pages:
+        blocks: list[dict] = []
+        for page_number, page in enumerate(reader.pages, start=1):
             extracted = (page.extract_text() or "").strip()
             if extracted:
                 pages.append(extracted)
+                blocks.extend(self._extract_pdf_blocks(extracted, page_number=page_number))
         text = "\n\n".join(pages).strip()
         if not text:
             raise ValueError("The PDF did not produce readable text.")
-        blocks = self._extract_pdf_blocks(text)
-        return text, self._build_structured_chunks(blocks)
+        return text, self._finalize_chunks(self._build_structured_chunks(blocks))
 
     def _extract_docx_content(self, content: bytes) -> tuple[str, list[dict]]:
         document = Document(BytesIO(content))
@@ -297,7 +299,7 @@ class SourceService:
         text = "\n\n".join(block["normalized_text"] for block in blocks if block["normalized_text"]).strip()
         if not text:
             raise ValueError("The DOCX did not produce readable text.")
-        return text, self._build_structured_chunks(blocks)
+        return text, self._finalize_chunks(self._build_structured_chunks(blocks))
 
     def _extract_docx_blocks(self, document) -> list[dict]:
         blocks: list[dict] = []
@@ -480,12 +482,26 @@ class SourceService:
         flush()
         return chunks
 
-    def _extract_pdf_blocks(self, text: str) -> list[dict]:
+    def _extract_pdf_blocks(self, text: str, *, page_number: int) -> list[dict]:
         blocks: list[dict] = []
         heading_stack: list[tuple[int, str]] = []
-        for raw_line in text.splitlines():
-            line = " ".join(raw_line.split()).strip()
+        for unit in self._split_pdf_units(text):
+            line = " ".join(unit.split()).strip()
             if not line:
+                continue
+
+            heading_level = self._detect_pdf_heading_level(line)
+            if heading_level is not None:
+                heading_stack = [entry for entry in heading_stack if entry[0] < heading_level]
+                heading_stack.append((heading_level, line))
+                blocks.append(
+                    self._make_chunk_block(
+                        text=line,
+                        section_label=line,
+                        section_type="heading",
+                        heading_path=self._format_heading_path(heading_stack),
+                    )
+                )
                 continue
 
             if self._looks_like_heading_line(line):
@@ -495,7 +511,7 @@ class SourceService:
                         text=line,
                         section_label=line,
                         section_type="heading",
-                        heading_path=line,
+                        heading_path=self._format_heading_path(heading_stack),
                     )
                 )
                 continue
@@ -517,7 +533,7 @@ class SourceService:
             blocks.append(
                 self._make_chunk_block(
                     text=line,
-                    section_label=self._default_section_label(heading_stack),
+                    section_label=self._default_section_label(heading_stack) if heading_stack else f"page_{page_number}",
                     section_type="body",
                     heading_path=self._format_heading_path(heading_stack),
                 )
@@ -549,6 +565,16 @@ class SourceService:
             return 1
         return None
 
+    def _detect_pdf_heading_level(self, text: str) -> int | None:
+        numbered = re.match(r"^(?P<num>\d+(?:\.\d+){0,2})[\s、.．)\]）-]+", text)
+        if numbered:
+            return min(numbered.group("num").count(".") + 1, 3)
+
+        chinese_numbered = re.match(r"^第?[一二三四五六七八九十百]+[章节部分篇][\s、.．)\]）-]*", text)
+        if chinese_numbered:
+            return 1
+        return None
+
     def _looks_like_heading_line(self, text: str) -> bool:
         if len(text) > 32:
             return False
@@ -566,6 +592,12 @@ class SourceService:
             if 0 < len(label) <= 24 and value:
                 return label, value
         return None
+
+    def _split_pdf_units(self, text: str) -> list[str]:
+        paragraphs = [segment.strip() for segment in re.split(r"\n\s*\n+", text) if segment.strip()]
+        if len(paragraphs) > 1:
+            return paragraphs
+        return [line.strip() for line in text.splitlines() if line.strip()]
 
     def _make_chunk_block(
         self,
@@ -585,7 +617,12 @@ class SourceService:
             "heading_path": heading_path,
             "field_label": field_label,
             "table_origin": table_origin,
-            "proposition_type": proposition_type,
+            "proposition_type": proposition_type or self._classify_proposition_type(
+                text=normalized_text,
+                field_label=field_label,
+                heading_path=heading_path,
+                section_type=section_type,
+            ),
             "normalized_text": normalized_text,
             "excerpt": normalized_text[:280],
         }
@@ -599,6 +636,96 @@ class SourceService:
         if not heading_stack:
             return "body"
         return heading_stack[-1][1]
+
+    def _finalize_chunks(self, chunks: list[dict]) -> list[dict]:
+        enriched = [dict(chunk) for chunk in chunks]
+        enriched.extend(self._build_proposition_chunks(enriched))
+        return enriched
+
+    def _build_proposition_chunks(self, chunks: list[dict]) -> list[dict]:
+        proposition_chunks: list[dict] = []
+        seen: set[tuple[str, str | None, str | None, str]] = set()
+
+        for chunk in chunks:
+            if chunk.get("section_type") not in {"body", "field"}:
+                continue
+            sentences = self._extract_proposition_sentences(chunk["normalized_text"])
+            for sentence in sentences:
+                if sentence == chunk["normalized_text"]:
+                    continue
+                proposition_type = self._classify_proposition_type(
+                    text=sentence,
+                    field_label=chunk.get("field_label"),
+                    heading_path=chunk.get("heading_path"),
+                    section_type="proposition",
+                )
+                if proposition_type is None:
+                    continue
+                dedupe_key = (
+                    sentence,
+                    chunk.get("heading_path"),
+                    chunk.get("field_label"),
+                    proposition_type,
+                )
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+                proposition_chunks.append(
+                    {
+                        "section_label": chunk["section_label"],
+                        "section_type": "proposition",
+                        "heading_path": chunk.get("heading_path"),
+                        "field_label": chunk.get("field_label"),
+                        "table_origin": chunk.get("table_origin"),
+                        "proposition_type": proposition_type,
+                        "normalized_text": sentence,
+                        "excerpt": sentence[:280],
+                    }
+                )
+
+        return proposition_chunks
+
+    def _extract_proposition_sentences(self, text: str) -> list[str]:
+        normalized = " ".join(text.split()).strip()
+        if len(normalized) < 24:
+            return []
+
+        parts = re.split(r"(?<=[。！？；;.!?])\s+|(?<=[。！？；;.!?])", normalized)
+        sentences: list[str] = []
+        for part in parts:
+            sentence = part.strip(" \t\r\n；;。.!?").strip()
+            if len(sentence) < 12:
+                continue
+            if len(sentence) > 220:
+                continue
+            sentences.append(sentence)
+        return sentences
+
+    def _classify_proposition_type(
+        self,
+        *,
+        text: str,
+        field_label: str | None,
+        heading_path: str | None,
+        section_type: str,
+    ) -> str | None:
+        haystack = " ".join(part for part in (field_label, heading_path, text) if part).lower()
+
+        if any(keyword in haystack for keyword in ("题目", "标题", "课题", "项目名称", "project name", "title")):
+            return "identity"
+        if any(keyword in haystack for keyword in ("建议", "优化", "改进", "推荐", "suggest", "recommend", "improve")):
+            return "suggestion"
+        if any(keyword in haystack for keyword in ("结论", "可行", "总结", "conclusion", "feasible")):
+            return "conclusion"
+        if any(keyword in haystack for keyword in ("创新", "novel", "innovation")):
+            return "innovation"
+        if any(keyword in haystack for keyword in ("预期成果", "成果", "deliverable", "outcome", "result")):
+            return "outcome"
+        if any(keyword in haystack for keyword in ("研究内容", "实施计划", "方法", "方案", "implementation", "method", "plan")):
+            return "method"
+        if section_type in {"body", "field", "proposition"} and len(text) >= 18:
+            return "fact"
+        return None
 
     def _sync_source_vectors(self, source_id: str) -> None:
         chunks = self.repository.get_latest_source_chunks_for_indexing(source_id)

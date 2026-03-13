@@ -394,6 +394,7 @@ def test_docx_preview_exposes_structured_chunk_metadata(client):
     assert any(chunk["field_label"] == "课题名称" for chunk in preview_chunks)
     assert any(chunk["heading_path"] == "研究内容" for chunk in preview_chunks if chunk["section_type"] == "body")
     assert any(chunk["table_origin"] == "table_row_1" for chunk in preview_chunks if chunk["field_label"] == "课题名称")
+    assert any(chunk["proposition_type"] == "method" for chunk in preview_chunks if chunk["section_type"] == "body")
 
 
 def test_field_chunks_are_ranked_ahead_of_plain_body_hits_for_field_queries(client, monkeypatch):

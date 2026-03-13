@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AnchorHTMLAttributes } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -161,5 +161,40 @@ describe("KnowledgePageClient", () => {
     );
 
     expect(screen.queryByText("Archived Notes")).not.toBeInTheDocument();
+  });
+
+  it("renders structured preview context for source chunks", async () => {
+    mocks.getSourcePreview.mockResolvedValueOnce({
+      ...createSource(),
+      preview_chunks: [
+        {
+          id: "chunk-1",
+          location_label: "研究内容 #1",
+          section_type: "body",
+          heading_path: "研究内容",
+          field_label: "课题名称",
+          table_origin: "table_row_1",
+          proposition_type: "method",
+          excerpt: "系统需要覆盖空气质量采集。",
+          normalized_text: "系统需要覆盖空气质量采集。",
+          char_count: 13,
+        },
+      ],
+    });
+
+    render(
+      <KnowledgePageClient
+        includeArchived={false}
+        initialGroups={createGroup([createSource({ title: "Structured Notes" })])}
+        initialQuery=""
+        projects={[createProject()]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Structured Notes/ }));
+
+    await waitFor(() => expect(mocks.getSourcePreview).toHaveBeenCalledWith("source-1"));
+    expect(await screen.findByText("研究内容 · 课题名称")).toBeInTheDocument();
+    expect(screen.getByText("系统需要覆盖空气质量采集。")).toBeInTheDocument();
   });
 });

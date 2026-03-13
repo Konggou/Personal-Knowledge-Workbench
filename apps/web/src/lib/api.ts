@@ -103,6 +103,11 @@ export type KnowledgeSource = {
 export type SourcePreviewChunk = {
   id: string;
   location_label: string;
+  section_type: string;
+  heading_path: string | null;
+  field_label: string | null;
+  table_origin: string | null;
+  proposition_type: string | null;
   excerpt: string;
   normalized_text: string;
   char_count: number;

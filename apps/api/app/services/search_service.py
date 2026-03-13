@@ -74,6 +74,14 @@ FIELD_QUERY_GROUPS = {
     "\u4f18\u5316": ("\u5efa\u8bae", "\u4f18\u5316", "\u6539\u8fdb"),
     "\u6539\u8fdb": ("\u5efa\u8bae", "\u4f18\u5316", "\u6539\u8fdb"),
 }
+PROPOSITION_QUERY_GROUPS = {
+    "identity": ("\u9898\u76ee", "\u6807\u9898", "\u9879\u76ee", "\u8bfe\u9898", "project name", "title"),
+    "suggestion": ("\u5efa\u8bae", "\u4f18\u5316", "\u6539\u8fdb", "suggest", "recommend", "improve"),
+    "conclusion": ("\u7ed3\u8bba", "\u603b\u7ed3", "\u53ef\u884c", "conclusion", "summary", "feasible"),
+    "innovation": ("\u521b\u65b0", "\u521b\u65b0\u70b9", "innovation", "novel"),
+    "outcome": ("\u9884\u671f\u6210\u679c", "\u6210\u679c", "outcome", "deliverable", "result"),
+    "method": ("\u7814\u7a76\u5185\u5bb9", "\u5b9e\u65bd\u8ba1\u5212", "\u65b9\u6cd5", "\u65b9\u6848", "implementation", "method", "plan"),
+}
 FOLLOW_UP_QUERY_TERMS = {
     "\u73b0\u5728",
     "\u8fd9\u4e2a",
@@ -259,6 +267,9 @@ class SearchService:
             if chunk.get("section_type") == "field":
                 score += 0.55
                 score += self._field_label_query_boost(query=query, field_label=chunk.get("field_label"))
+            elif chunk.get("section_type") == "proposition":
+                score += 0.45
+                score += self._proposition_query_boost(query=query, proposition_type=chunk.get("proposition_type"))
             elif chunk.get("section_type") == "heading":
                 score += 0.25
                 if query_seeks_field_answer:
@@ -712,3 +723,15 @@ class SearchService:
     def _query_seeks_field_answer(self, query: str) -> bool:
         normalized_query = " ".join(query.split()).lower()
         return any(trigger in normalized_query for trigger in FIELD_QUERY_GROUPS)
+
+    def _proposition_query_boost(self, *, query: str, proposition_type: str | None) -> float:
+        if not proposition_type:
+            return 0.0
+
+        normalized_query = " ".join(query.split()).lower()
+        triggers = PROPOSITION_QUERY_GROUPS.get(proposition_type)
+        if not triggers:
+            return 0.0
+        if any(trigger in normalized_query for trigger in triggers):
+            return 2.2
+        return 0.0

@@ -3,6 +3,7 @@ from io import BytesIO
 from docx import Document
 
 from app.services.search_service import SearchService
+from app.services.retrieval_eval_service import run_retrieval_eval
 
 
 def _create_project(client, *, name: str = "Retrieval Eval Project") -> dict:
@@ -118,3 +119,24 @@ def test_v21_minimal_retrieval_eval_set(client, monkeypatch):
     assert results[1]["triggered_second_pass"] is True
     assert results[2]["grounded_candidate"] is True
     assert results[3]["triggered_second_pass"] is True
+
+
+def test_v24_retrieval_eval_runner_returns_structured_results(client, monkeypatch):
+    monkeypatch.setattr("app.services.vector_store.VectorStore.search", lambda self, *, query, project_id, limit: [])
+
+    report = run_retrieval_eval(client)
+
+    assert report["case_count"] >= 6
+    assert report["passed_case_count"] >= 5
+    case_ids = {item["case_id"] for item in report["results"]}
+    assert "direct_field_title" in case_ids
+    assert "natural_follow_up" in case_ids
+    assert "unrelated_weather" in case_ids
+
+    natural_follow_up = next(item for item in report["results"] if item["case_id"] == "natural_follow_up")
+    assert natural_follow_up["triggered_second_pass"] is True
+    assert natural_follow_up["status"] == "passed"
+
+    unrelated = next(item for item in report["results"] if item["case_id"] == "unrelated_weather")
+    assert unrelated["grounded_candidate"] is False
+    assert unrelated["status"] == "passed"

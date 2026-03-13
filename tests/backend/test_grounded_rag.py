@@ -190,7 +190,7 @@ def test_explicit_deep_research_always_reranks_and_uses_five_evidences(client, m
     assert response.status_code == 200, response.text
     detail = response.json()["item"]
 
-    assert captured["limit"] == 5
+    assert captured["limit"] == 10
     assert captured["apply_rerank"] is True
     assert captured["history"][-1]["content_md"]
     answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
@@ -668,4 +668,198 @@ def test_grounded_generation_stores_latest_retrieval_diagnostics(monkeypatch):
     )
 
     assert packed[0]["evidence_index"] == 1
-    assert grounded_generation.last_retrieval_diagnostics == diagnostics
+    assert grounded_generation.last_retrieval_diagnostics is not None
+    assert grounded_generation.last_retrieval_diagnostics["original_query"] == diagnostics["original_query"]
+    assert grounded_generation.last_retrieval_diagnostics["selection"]["selected_candidate_count"] == 1
+    assert grounded_generation.last_retrieval_diagnostics["compression"]["compressed_evidence_count"] == 1
+
+
+def test_grounded_generation_compresses_selected_evidence_and_augments_diagnostics(monkeypatch):
+    grounded_generation = sessions_route_service.grounded_generation
+    evidence = [
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-heading",
+            "source_id": "source-1",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "Implementation Plan #1",
+            "excerpt": "Implementation Plan introduction paragraph with broad context.",
+            "normalized_text": (
+                "Implementation Plan covers sensing, control, and dashboard modules. "
+                "The control module coordinates fan speed adjustments. "
+                "Budget discussion is listed elsewhere."
+            ),
+            "relevance_score": 4.1,
+            "section_type": "body",
+            "heading_path": "Implementation Plan",
+            "field_label": None,
+            "table_origin": None,
+            "proposition_type": "method",
+        },
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-field",
+            "source_id": "source-1",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "Project Name #2",
+            "excerpt": "Project Name: Indoor Air Quality System",
+            "normalized_text": "Project Name: Indoor Air Quality System",
+            "relevance_score": 4.6,
+            "section_type": "field",
+            "heading_path": "Implementation Plan",
+            "field_label": "Project Name",
+            "table_origin": "table_row_1",
+            "proposition_type": "identity",
+        },
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-proposition",
+            "source_id": "source-1",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "Implementation Plan #3",
+            "excerpt": "The control module coordinates fan speed adjustments.",
+            "normalized_text": "The control module coordinates fan speed adjustments.",
+            "relevance_score": 4.3,
+            "section_type": "proposition",
+            "heading_path": "Implementation Plan",
+            "field_label": None,
+            "table_origin": None,
+            "proposition_type": "method",
+        },
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-extra",
+            "source_id": "source-2",
+            "source_title": "Budget.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///budget.docx",
+            "location_label": "Budget #1",
+            "excerpt": "Unrelated budget detail.",
+            "normalized_text": "Unrelated budget detail for a different section.",
+            "relevance_score": 1.2,
+            "section_type": "body",
+            "heading_path": "Budget",
+            "field_label": None,
+            "table_origin": None,
+            "proposition_type": "fact",
+        },
+    ]
+    diagnostics = {
+        "original_query": "What is the implementation plan?",
+        "context_clues": [],
+        "first_pass": {
+            "hit_count": len(evidence),
+            "top_score": 4.6,
+            "title_hit_count": 1,
+            "field_hit_count": 1,
+            "term_coverage_ratio": 1.0,
+            "is_low_confidence": False,
+        },
+        "triggered_second_pass": False,
+        "retry_steps": [],
+        "final": {
+            "hit_count": len(evidence),
+            "source_count": 2,
+            "grounded_candidate": True,
+            "returned_hit_count": len(evidence),
+        },
+    }
+
+    monkeypatch.setattr(
+        grounded_generation.search,
+        "retrieve_project_evidence_with_diagnostics",
+        lambda *args, **kwargs: (evidence, diagnostics),
+    )
+
+    packed = grounded_generation.retrieve_evidence(
+        project_id="project-1",
+        query="What is the implementation plan?",
+        research_mode=False,
+        history=None,
+    )
+
+    assert len(packed) == 3
+    assert packed[0]["evidence_index"] == 1
+    assert all("compression_reason" in item for item in packed)
+    assert packed[0]["excerpt"]
+    assert len(packed[0]["excerpt"]) <= len(packed[0]["normalized_text"])
+    assert "source_excerpt" in packed[0]
+
+    augmented = grounded_generation.last_retrieval_diagnostics
+    assert augmented is not None
+    assert augmented["selection"]["selector_applied"] is True
+    assert augmented["compression"]["compressed_evidence_count"] == 3
+    assert augmented["final"]["selected_evidence_count"] == 3
+
+
+def test_grounded_generation_rejects_low_confidence_second_pass_false_positives(monkeypatch):
+    grounded_generation = sessions_route_service.grounded_generation
+    evidence = [
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-low",
+            "source_id": "source-1",
+            "source_title": "Outline.docx",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///outline.docx",
+            "location_label": "Project Name #1",
+            "excerpt": "Project Name: Indoor Air Quality System",
+            "normalized_text": "Project Name: Indoor Air Quality System",
+            "relevance_score": 1.55,
+            "section_type": "field",
+            "heading_path": "Overview",
+            "field_label": "Project Name",
+            "table_origin": "table_row_1",
+            "proposition_type": "identity",
+        }
+    ]
+    diagnostics = {
+        "original_query": "今天北京天气如何？",
+        "context_clues": [],
+        "first_pass": {
+            "hit_count": 0,
+            "top_score": 0.0,
+            "title_hit_count": 0,
+            "field_hit_count": 0,
+            "term_coverage_ratio": 0.0,
+            "is_low_confidence": True,
+        },
+        "triggered_second_pass": True,
+        "retry_steps": [{"strategy": "hyde_passage", "query": "北京今日天气预报", "hit_count": 1, "top_score": 1.55}],
+        "final": {
+            "hit_count": 1,
+            "source_count": 1,
+            "grounded_candidate": True,
+            "returned_hit_count": 1,
+        },
+    }
+
+    monkeypatch.setattr(
+        grounded_generation.search,
+        "retrieve_project_evidence_with_diagnostics",
+        lambda *args, **kwargs: (evidence, diagnostics),
+    )
+
+    packed = grounded_generation.retrieve_evidence(
+        project_id="project-1",
+        query="今天北京天气如何？",
+        research_mode=False,
+        history=None,
+    )
+
+    assert packed == []
+    augmented = grounded_generation.last_retrieval_diagnostics
+    assert augmented is not None
+    assert augmented["selection"]["selected_candidate_count"] == 0
+    assert augmented["selection"]["rejection_reason"] == "low_confidence_delivery_candidate"

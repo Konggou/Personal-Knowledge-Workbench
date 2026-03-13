@@ -329,10 +329,38 @@ Qdrant 是默认向量索引层。
 - `SourceService` now builds structured chunk blocks before persistence:
   - DOCX: heading-aware, field-aware, table-aware
   - PDF: lightweight heading/field detection plus body chunk assembly
+- Proposition chunks are now generated from structured body/field content and classified into lightweight proposition types.
 - `SearchService` now treats field chunks and heading paths as first-class lexical signals.
 - `VectorStore` payloads now persist the same metadata so semantic hits can be merged back with structured context.
-- `proposition_type` is intentionally reserved for the later proposition-chunk phase and is not populated yet in V2.2 first slice.
 - `SearchService` now also performs a lightweight hierarchical expansion step:
   - anchor hits from headings can pull in sibling body chunks under the same `heading_path`
   - field hits only expand when they already belong to a scoped heading path
   - this is intentionally a light retrieval repair layer, not a full chapter-summary hierarchy
+
+## 11. V2.3 Grounded Delivery Notes
+
+- `GroundedGenerationService` now inserts an internal `selection -> compression -> evidence pack` layer after retrieval.
+- Grounded delivery now:
+  - requests a wider internal candidate set
+  - selects the final evidence budget with a structure-aware selector
+  - compresses long body evidence into sentence-focused excerpts
+  - preserves `source_excerpt` separately for internal prompt/debug use
+- Delivery diagnostics now include:
+  - `selection`
+  - `compression`
+  - `selected_evidence_count`
+- Low-confidence second-pass false positives are rejected before the answer is allowed to remain in `project_grounded`.
+
+## 12. V2.4 Eval And Observability Notes
+
+- Added an internal retrieval evaluation service and CLI runner:
+  - `app.services.retrieval_eval_service`
+  - `scripts/run_retrieval_eval.py`
+- The eval suite seeds a local DOCX fixture and records, per case:
+  - grounded candidate status
+  - second-pass trigger status
+  - hit count
+  - packed hit count
+  - retrieval diagnostics
+  - grounded-delivery diagnostics
+- These diagnostics remain internal and are intentionally not exposed through public API payloads or frontend SSE contracts.

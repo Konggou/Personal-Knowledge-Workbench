@@ -419,4 +419,44 @@ describe("ProjectChatClient", () => {
     await waitFor(() => expect(screen.getByText("2 份资料 · 1 个会话")).toBeInTheDocument());
     expect(screen.getByText("知识库 · 2 份资料")).toBeInTheDocument();
   });
+
+  it("renders structured preview context when opening a source from the source bubble", async () => {
+    const project = createProject();
+    const session = createSessionWithAssistantAnswer();
+
+    mocks.getSourcePreview.mockResolvedValueOnce({
+      ...createKnowledgeSource(),
+      preview_chunks: [
+        {
+          id: "chunk-1",
+          location_label: "研究内容 #1",
+          section_type: "body",
+          heading_path: "研究内容",
+          field_label: "课题名称",
+          table_origin: "table_row_1",
+          proposition_type: "method",
+          excerpt: "系统需要覆盖空气质量采集。",
+          normalized_text: "系统需要覆盖空气质量采集。",
+          char_count: 13,
+        },
+      ],
+    });
+
+    render(
+      <ProjectChatClient
+        allProjects={[project]}
+        initialSelectedSession={session}
+        initialSessionGroups={createSessionGroups()}
+        initialSources={[createKnowledgeSource()]}
+        project={project}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "1 个来源" }));
+    fireEvent.click(screen.getByRole("button", { name: "Quest 3 Notes" }));
+
+    await waitFor(() => expect(mocks.getSourcePreview).toHaveBeenCalledWith("source-1"));
+    expect(await screen.findByText("研究内容 · 课题名称")).toBeInTheDocument();
+    expect(screen.getByText("系统需要覆盖空气质量采集。")).toBeInTheDocument();
+  });
 });

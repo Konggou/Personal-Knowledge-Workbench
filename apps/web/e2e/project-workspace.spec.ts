@@ -1,6 +1,11 @@
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const fixtureUrl = "http://127.0.0.1:3311/source-article";
+const repoRoot = join(process.cwd(), "..", "..");
+const apiPython = join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe");
 
 function uniqueSuffix() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -34,6 +39,43 @@ async function addFixtureSourceInsideChat(page: Page) {
   await expect(page.locator("main")).toContainText("已添加网页资料");
 }
 
+function createStructuredDocx(outputPath: string) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      headings: ["研究内容", "优化建议"],
+      paragraphs: [
+        "该系统面向室内空气质量检测与智能控制。",
+        "实施计划包括采集模块、控制模块、显示模块与告警模块。",
+        "控制模块负责根据空气质量指标联动风扇转速。",
+        "可以进一步优化多传感器融合并补充实验验证。",
+      ],
+      table_rows: [
+        ["课题名称", "基于STM32的室内空气质量检测与智能控制系统设计"],
+        ["项目名称", "室内空气质量检测与智能控制系统"],
+      ],
+    }),
+    "utf8",
+  ).toString("base64");
+
+  const script = [
+    "import base64, json, sys",
+    "from docx import Document",
+    "payload = json.loads(base64.b64decode(sys.argv[1]).decode('utf-8'))",
+    "document = Document()",
+    "for heading in payload['headings']:",
+    "    document.add_heading(heading, level=1)",
+    "for paragraph in payload['paragraphs']:",
+    "    document.add_paragraph(paragraph)",
+    "table = document.add_table(rows=len(payload['table_rows']), cols=2)",
+    "for row_index, row in enumerate(payload['table_rows']):",
+    "    table.cell(row_index, 0).text = row[0]",
+    "    table.cell(row_index, 1).text = row[1]",
+    "document.save(sys.argv[2])",
+  ].join("\n");
+
+  execFileSync(apiPython, ["-c", script, payload, outputPath], { stdio: "pipe" });
+}
+
 test.describe("chat-first project flow", () => {
   test("creates a project, starts a session, adds a source, and answers in the same chat", async ({ page }) => {
     await createProject(page, "E2E Chat");
@@ -45,7 +87,7 @@ test.describe("chat-first project flow", () => {
 
     await expect(page.locator("main")).toContainText("lighthouse orchard benchmark");
     await page.getByRole("button", { name: /1 个来源|2 个来源|3 个来源/ }).click();
-    await expect(page.getByRole("button", { name: "Workbench Fixture Article" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Workbench Fixture Article" }).first()).toBeVisible();
   });
 
   test("creates a summary card and a report card inside the same session", async ({ page }) => {
@@ -124,5 +166,38 @@ test.describe("chat-first project flow", () => {
 
     await archivedCard.getByRole("button", { name: "删除" }).click();
     await expect(archivedCard).toBeHidden();
+  });
+  test("imports a docx source and keeps grounded follow-up in the same session", async ({ page }, testInfo) => {
+    const docxPath = testInfo.outputPath("structured-e2e.docx");
+    createStructuredDocx(docxPath);
+
+    await createProject(page, "E2E Structured DOCX");
+    await createSession(page);
+
+    await page.locator('input[type="file"]').setInputFiles(docxPath);
+    await expect(page.locator("main")).toContainText("structured-e2e.docx");
+
+    await page.locator("textarea").fill("我的课题名称是什么？");
+    await page.getByRole("button", { name: /鍙戦€?|发送/ }).click();
+    await expect(page.locator("main")).toContainText("基于STM32的室内空气质量检测与智能控制系统设计");
+
+    await page.locator("textarea").fill("现在你知道了吗？");
+    await page.getByRole("button", { name: /鍙戦€?|发送/ }).click();
+    await expect(page.locator("main")).toContainText("基于STM32的室内空气质量检测与智能控制系统设计");
+    await expect(page).toHaveURL(/sessionId=/);
+  });
+
+  test("keeps deep research inside the same session flow", async ({ page }) => {
+    await createProject(page, "E2E Deep Research");
+    await createSession(page);
+    await addFixtureSourceInsideChat(page);
+
+    await page.getByRole("button", { name: /娣卞害璋冪爺|深度调研/ }).click();
+    await page.locator("textarea").fill("请结合资料深度调研 lighthouse orchard benchmark。");
+    await page.getByRole("button", { name: /鍙戦€?|发送/ }).click();
+
+    await expect(page.locator("main")).toContainText(/璋冪爺|调研/);
+    await expect(page.locator("main")).toContainText(/璋冪爺缁撹|调研结论/);
+    await expect(page).toHaveURL(/sessionId=/);
   });
 });

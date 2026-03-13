@@ -61,6 +61,7 @@ class SourcePreviewChunkRecord:
     heading_path: str | None
     field_label: str | None
     table_origin: str | None
+    proposition_type: str | None
     chunk_index: int
     excerpt: str
     normalized_text: str
@@ -74,6 +75,7 @@ class SourcePreviewChunkRecord:
             "heading_path": self.heading_path,
             "field_label": self.field_label,
             "table_origin": self.table_origin,
+            "proposition_type": self.proposition_type,
             "excerpt": self.excerpt,
             "normalized_text": self.normalized_text,
             "char_count": self.char_count,
@@ -301,6 +303,7 @@ class SourceRepository:
                   sc.heading_path,
                   sc.field_label,
                   sc.table_origin,
+                  sc.proposition_type,
                   sc.chunk_index,
                   sc.excerpt,
                   sc.normalized_text,

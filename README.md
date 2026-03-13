@@ -158,6 +158,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 ```powershell
 apps/api/.venv/Scripts/python.exe -m compileall apps/api/app
 apps/api/.venv/Scripts/python.exe -m pytest tests/backend
+apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py
 ```
 
 ### 前端
@@ -215,6 +216,13 @@ agentic_rag/
 - 更强的 DOCX / PDF 结构化切块与字段提取
 - 更稳定的 grounded markdown 输出与列表格式归一化
 - 更完善的真实问答评测与端到端回归
+
+当前仓库已经落地到：
+
+- V2.1：上下文改写 / 字段别名扩展 / 条件 HyDE / retrieval diagnostics
+- V2.2：structured chunking / proposition chunks / lightweight hierarchical retrieval
+- V2.3：evidence selection / contextual compression / low-confidence grounded gating
+- V2.4：retrieval eval runner / delivery diagnostics / expanded Playwright coverage
 
 ## V2 Detailed Direction
 

@@ -221,6 +221,13 @@
   white-space: pre-wrap;
 }
 
+.chunkMeta {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
 .previewFooter {
   align-items: center;
 }

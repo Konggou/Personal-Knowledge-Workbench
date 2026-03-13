@@ -347,3 +347,28 @@
   - proposition-level retrieval
   - richer summary-block / chapter-block hierarchy
   - stronger PDF structural reconstruction
+
+## 12. V2.3 Slice - Contextual Compression And Evidence Selection
+
+- Scope completed in this slice:
+  - grounded delivery now retrieves a wider candidate set internally before selecting the final evidence budget
+  - a selector layer now ranks field / proposition / heading / body candidates before the final 3-or-5 evidence pack is assembled
+  - body chunks now pass through sentence-focused compression so long paragraphs no longer reach the grounded prompt unchanged
+  - evidence-pack assembly now preserves `source_excerpt` while feeding a shorter `excerpt` to the grounded generation prompt
+  - grounded delivery now rejects low-confidence second-pass false positives before they can leak into `project_grounded`
+- Current design boundaries:
+  - no new public API fields
+  - no frontend terminology changes
+  - no automatic upgrade from ordinary grounded Q&A to deep research
+
+## 13. V2.4 Slice - Retrieval Eval And Delivery Observability
+
+- Scope completed in this slice:
+  - added a reusable retrieval evaluation service with a seeded DOCX fixture and a stable case set
+  - added `scripts/run_retrieval_eval.py` to run the eval suite in an isolated local data directory and print JSON
+  - eval output now records both retrieval diagnostics and grounded-delivery diagnostics (`selection` + `compression`)
+  - source preview metadata is now aligned end-to-end for backend summaries, frontend types, and preview UI context rendering
+  - Playwright coverage now includes DOCX import + grounded follow-up and deep-research continuity in the same session
+- Current design boundaries:
+  - eval output is for local/dev use and is not exposed through public API routes
+  - observability stays file/CLI driven rather than becoming a production monitoring surface

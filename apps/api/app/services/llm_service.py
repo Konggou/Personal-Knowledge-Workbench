@@ -233,6 +233,13 @@ class LLMService:
         evidence_lines = []
         for index, item in enumerate(evidence_pack, start=1):
             evidence_index = item.get("evidence_index", index)
+            context_parts = []
+            if item.get("heading_path"):
+                context_parts.append(f"heading_path={item['heading_path']}")
+            if item.get("field_label"):
+                context_parts.append(f"field_label={item['field_label']}")
+            if item.get("proposition_type"):
+                context_parts.append(f"proposition_type={item['proposition_type']}")
             evidence_lines.append(
                 "\n".join(
                     [
@@ -241,7 +248,9 @@ class LLMService:
                         f"title: {item['source_title']}",
                         f"source_type: {item['source_type']}",
                         f"location: {item['location_label']}",
+                        f"context: {'; '.join(context_parts)}" if context_parts else "context: none",
                         f"excerpt: {item['excerpt']}",
+                        f"source_excerpt: {item['source_excerpt']}" if item.get("source_excerpt") else "source_excerpt: none",
                     ]
                 )
             )

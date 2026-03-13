@@ -392,3 +392,37 @@ Verified
 - Backend pytest passed after V2.2 lightweight hierarchical retrieval:
   - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
   - 26 tests passed
+
+Completed Feature Slice
+- Implemented the V2.3 grounded-delivery slice:
+  - source preview metadata is now aligned end-to-end for backend preview summaries, frontend types, and preview UI context rendering
+  - grounded delivery now retrieves a wider internal candidate set and applies a structure-aware selector before building the final 3/5 evidence pack
+  - long body evidence is now compressed into sentence-focused excerpts while preserving the original `source_excerpt` for internal prompt/debug use
+  - grounded delivery now rejects low-confidence second-pass false positives before they can leak into `project_grounded`
+  - grounded prompt assembly now carries structured context (`heading_path`, `field_label`, `proposition_type`) without exposing new public API terminology
+
+Verified
+- Backend pytest passed after V2.3 grounded-delivery upgrade:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
+  - 29 tests passed
+- Frontend vitest/typecheck/build passed after source-preview contract alignment:
+  - corepack pnpm --dir apps/web test
+  - corepack pnpm --dir apps/web typecheck
+  - corepack pnpm --dir apps/web build
+
+Completed Feature Slice
+- Implemented the V2.4 eval + observability slice:
+  - added `app.services.retrieval_eval_service` with a seeded DOCX fixture and a stable retrieval-eval case set
+  - added `scripts/run_retrieval_eval.py` to run the suite in an isolated local data directory and emit JSON
+  - eval output now records both raw retrieval diagnostics and grounded-delivery diagnostics (`selection` + `compression`)
+  - Playwright coverage now includes:
+    - DOCX import -> grounded question -> Chinese follow-up in the same session
+    - deep-research continuity in the same session flow
+
+Verified
+- Retrieval eval runner passed with all seeded cases:
+  - apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py
+  - 6 / 6 cases passed
+- Playwright E2E passed after V2.4 coverage expansion:
+  - corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts
+  - 6 tests passed

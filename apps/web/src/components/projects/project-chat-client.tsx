@@ -745,12 +745,16 @@ export function ProjectChatClient({
             </div>
             <p className={styles.previewLink}>{previewSource.canonical_uri}</p>
             <div className={styles.previewChunks}>
-              {previewSource.preview_chunks.map((chunk) => (
-                <article key={chunk.id} className={styles.previewChunkCard}>
-                  <strong>{chunk.location_label}</strong>
-                  <p>{chunk.normalized_text}</p>
-                </article>
-              ))}
+              {previewSource.preview_chunks.map((chunk) => {
+                const context = renderPreviewChunkContext(chunk);
+                return (
+                  <article key={chunk.id} className={styles.previewChunkCard}>
+                    <strong>{chunk.location_label}</strong>
+                    {context ? <span className={styles.previewChunkMeta}>{context}</span> : null}
+                    <p>{chunk.normalized_text}</p>
+                  </article>
+                );
+              })}
             </div>
             <div className={styles.previewFooter}>
               <Link className={styles.knowledgeLink} href={`/knowledge?projectId=${previewSource.project_id}`}>
@@ -940,6 +944,11 @@ function normalizeSourceError(message: string) {
     return "当前仅支持 PDF 和 DOCX 文件，暂不支持旧版 DOC 文件。";
   }
   return message;
+}
+
+function renderPreviewChunkContext(chunk: SourcePreview["preview_chunks"][number]) {
+  const parts = [chunk.heading_path, chunk.field_label].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
 }
 
 function projectInitials(name: string) {
