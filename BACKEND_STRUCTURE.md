@@ -352,6 +352,8 @@ Qdrant 是默认向量索引层。
   - only after successful assistant answers
 - `web_search` / `web_fetch`
   - only enabled when the user explicitly turns on `web_browsing`
+  - URLs are normalized before fetch/save so tracking parameters do not create duplicate knowledge-base entries
+  - fetched pages are lightly cleaned to remove obvious boilerplate, duplicate paragraphs, and weak navigation text
 - `read_source_context`
   - internal helper for source preview style context reads
 
@@ -368,6 +370,9 @@ Qdrant 是默认向量索引层。
   - `source_kind = project_source | external_web`
   - `source_id` can be null for external web evidence
   - `external_uri` stores the original web page URL for external evidence
+- grounded evidence fusion keeps project evidence primary:
+  - normal grounded delivery only allows external-web evidence when project hits still leave a gap
+  - research delivery can keep a small external supplement budget, but project evidence still ranks first
 
 ### 10.5 Public Contract Changes
 

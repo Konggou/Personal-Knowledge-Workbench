@@ -284,6 +284,48 @@ class SourceRepository:
         finally:
             connection.close()
 
+    def find_active_source_by_uri(self, *, project_id: str, canonical_uri: str) -> SourceRecord | None:
+        connection = get_connection()
+        try:
+            row = connection.execute(
+                """
+                SELECT
+                  s.id,
+                  s.project_id,
+                  p.name AS project_name,
+                  s.source_type,
+                  s.title,
+                  s.canonical_uri,
+                  s.original_filename,
+                  s.mime_type,
+                  s.content_hash,
+                  s.ingestion_status,
+                  s.quality_level,
+                  s.refresh_strategy,
+                  s.last_refreshed_at,
+                  s.error_code,
+                  s.error_message,
+                  s.created_at,
+                  s.updated_at,
+                  s.archived_at,
+                  s.deleted_at
+                FROM sources s
+                JOIN projects p ON p.id = s.project_id
+                WHERE s.project_id = ?
+                  AND s.canonical_uri = ?
+                  AND s.deleted_at IS NULL
+                  AND s.ingestion_status != 'archived'
+                ORDER BY s.updated_at DESC
+                LIMIT 1
+                """,
+                (project_id, canonical_uri),
+            ).fetchone()
+            if row is None:
+                return None
+            return SourceRecord(**dict(row))
+        finally:
+            connection.close()
+
     def get_source_preview_chunks(self, source_id: str, *, limit: int = 8) -> list[SourcePreviewChunkRecord]:
         connection = get_connection()
         try:

@@ -275,6 +275,34 @@ def test_v3_successful_grounded_answers_persist_memory_entries(client, monkeypat
     assert any("Touch Plus" in entry.fact_text for entry in project_entries)
 
 
+def test_v3_saving_same_external_url_reuses_existing_project_source(client, html_server):
+    project = _create_project(client, name="Web Save Dedupe")
+    session = _create_session(client, project["id"])
+    path = html_server["root"] / "dedupe-source.html"
+    path.write_text(
+        "<html><head><title>Quest 3 Notes</title></head><body><p>Quest 3 ships with Touch Plus controllers by default.</p></body></html>",
+        encoding="utf-8",
+    )
+    base_url = f"{html_server['base_url']}/dedupe-source.html"
+
+    first = client.post(
+        f"/api/v1/projects/{project['id']}/sources/web",
+        json={"url": f"{base_url}?utm_source=test", "session_id": session["id"]},
+    )
+    second = client.post(
+        f"/api/v1/projects/{project['id']}/sources/web",
+        json={"url": f"{base_url}?utm_medium=email", "session_id": session["id"]},
+    )
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    assert first.json()["item"]["id"] == second.json()["item"]["id"]
+    assert first.json()["item"]["canonical_uri"] == second.json()["item"]["canonical_uri"]
+
+    sources = client.get(f"/api/v1/projects/{project['id']}/sources").json()["items"]
+    assert len(sources) == 1
+
+
 def test_v3_pre_answer_check_can_retry_project_retrieval_once(client, monkeypatch, html_server):
     project = _create_project(client, name="Retry Project")
     session = _create_session(client, project["id"])

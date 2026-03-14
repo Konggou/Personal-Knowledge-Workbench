@@ -164,7 +164,14 @@ class GroundedGenerationService:
             selection_diagnostics = {}
             compression_diagnostics = {}
 
-        candidate_pool = [*accepted_project_hits, *(external_hits or [])]
+        external_candidates = self._limit_external_candidates(
+            query=query,
+            project_hits=accepted_project_hits,
+            external_hits=external_hits or [],
+            limit=final_limit,
+            research_mode=research_mode,
+        )
+        candidate_pool = [*accepted_project_hits, *external_candidates]
         if not candidate_pool:
             if not selection_diagnostics:
                 selection_diagnostics = {
@@ -205,6 +212,56 @@ class GroundedGenerationService:
             {item["canonical_uri"] for item in selected if item.get("source_kind") == "external_web"}
         )
         return packed, augmented
+
+    def _limit_external_candidates(
+        self,
+        *,
+        query: str,
+        project_hits: list[dict],
+        external_hits: list[dict],
+        limit: int,
+        research_mode: bool,
+    ) -> list[dict]:
+        if not external_hits:
+            return []
+        if not project_hits:
+            return external_hits[:limit]
+
+        project_haystack = " ".join(
+            " ".join(
+                str(value or "")
+                for value in (
+                    item.get("source_title"),
+                    item.get("heading_path"),
+                    item.get("field_label"),
+                    item.get("normalized_text"),
+                    item.get("excerpt"),
+                )
+            ).lower()
+            for item in project_hits[:4]
+        )
+        ranked_external: list[dict] = []
+        for item in external_hits:
+            overlap = 0
+            for term in [term for term in self.search.repository.build_query_terms(query) if len(term) >= 2]:
+                if term in project_haystack and term in str(item.get("normalized_text") or "").lower():
+                    overlap += 1
+            ranked_external.append({**item, "_project_overlap": overlap})
+        ranked_external.sort(
+            key=lambda item: (float(item.get("relevance_score", 0.0)), -int(item["_project_overlap"])),
+            reverse=True,
+        )
+        external_budget = 1 if not research_mode else 2
+        if len(project_hits) >= limit:
+            external_budget = 0
+        elif len(project_hits) >= max(2, limit - 1):
+            external_budget = 0 if not research_mode else 1
+        trimmed: list[dict] = []
+        for item in ranked_external:
+            if len(trimmed) >= external_budget:
+                break
+            trimmed.append({key: value for key, value in item.items() if key != "_project_overlap"})
+        return trimmed
 
     def _build_evidence_pack(self, *, query: str, evidences: list[dict]) -> tuple[list[dict], dict]:
         packed: list[dict] = []
@@ -408,7 +465,9 @@ class GroundedGenerationService:
 
         score = float(item.get("relevance_score", 0.0))
         if item.get("source_kind") != "external_web":
-            score += 0.35
+            score += 1.0
+        else:
+            score -= 0.35
         score += 0.45 * sum(1 for term in terms if term in normalized_text)
         score += 0.2 * sum(1 for term in terms if term in excerpt)
 

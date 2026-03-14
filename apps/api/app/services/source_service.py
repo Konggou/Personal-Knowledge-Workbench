@@ -1,9 +1,7 @@
-from html.parser import HTMLParser
 from io import BytesIO
 from pathlib import Path
 import re
 
-import httpx
 from docx import Document
 from docx.oxml.table import CT_Tbl
 from docx.oxml.text.paragraph import CT_P
@@ -15,53 +13,7 @@ from pypdf import PdfReader
 from app.repositories.session_repository import SessionRepository
 from app.repositories.source_repository import SourceRepository
 from app.services.vector_store import VectorStore
-
-
-class _HTMLTextExtractor(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self._skip_tag: str | None = None
-        self._title_parts: list[str] = []
-        self._text_parts: list[str] = []
-        self._in_title = False
-
-    def handle_starttag(self, tag: str, _attrs: list[tuple[str, str | None]]) -> None:
-        if tag in {"script", "style", "noscript"}:
-            self._skip_tag = tag
-        elif tag == "title":
-            self._in_title = True
-        elif tag in {"p", "div", "section", "article", "br", "li", "h1", "h2", "h3"}:
-            self._text_parts.append("\n")
-
-    def handle_endtag(self, tag: str) -> None:
-        if self._skip_tag == tag:
-            self._skip_tag = None
-        if tag == "title":
-            self._in_title = False
-        if tag in {"p", "div", "section", "article", "li", "h1", "h2", "h3"}:
-            self._text_parts.append("\n")
-
-    def handle_data(self, data: str) -> None:
-        if self._skip_tag:
-            return
-
-        text = " ".join(data.split())
-        if not text:
-            return
-
-        if self._in_title:
-            self._title_parts.append(text)
-        self._text_parts.append(text)
-
-    @property
-    def title(self) -> str:
-        return " ".join(self._title_parts).strip()
-
-    @property
-    def text(self) -> str:
-        raw = "\n".join(part for part in self._text_parts if part.strip())
-        paragraphs = [" ".join(line.split()) for line in raw.splitlines()]
-        return "\n".join(line for line in paragraphs if line)
+from app.services.web_research_service import WebResearchService
 
 
 class SourceService:
@@ -69,6 +21,7 @@ class SourceService:
         self.repository = SourceRepository()
         self.sessions = SessionRepository()
         self.vector_store = VectorStore()
+        self.web_research = WebResearchService()
 
     def list_sources(self, project_id: str, *, include_archived: bool = False) -> list[dict]:
         if not self.repository.project_exists(project_id):
@@ -82,10 +35,19 @@ class SourceService:
         if not self.repository.project_exists(project_id):
             raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
 
-        source = self.repository.create_web_source(project_id, url)
-
         try:
-            title, text = self._fetch_web_content(url)
+            fetched = self.web_research.fetch(url=url)
+            canonical_uri = self.web_research.normalize_url(fetched["canonical_uri"])
+            existing = self.repository.find_active_source_by_uri(project_id=project_id, canonical_uri=canonical_uri)
+            if existing is not None:
+                summary = existing.to_summary()
+                if session_id is not None:
+                    self._append_source_update_message(session_id, summary, "网页资料已在知识库中")
+                return summary
+
+            source = self.repository.create_web_source(project_id, canonical_uri)
+            title = fetched["title"]
+            text = fetched["text"]
             chunks = self._finalize_chunks(self._build_plain_text_chunks(text))
             self._complete_ingestion(
                 source_id=source.id,
@@ -96,11 +58,7 @@ class SourceService:
                 reason="source_ingested",
             )
         except Exception as exc:
-            self.repository.finalize_source_failure(
-                source_id=source.id,
-                error_code="ingestion_failed",
-                error_message=str(exc),
-            )
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         refreshed = self.repository.get_source(source.id)
         if refreshed is None:
@@ -181,7 +139,9 @@ class SourceService:
 
         self.repository.mark_source_processing(source_id)
         try:
-            title, text = self._fetch_web_content(source.canonical_uri)
+            fetched = self.web_research.fetch(url=source.canonical_uri)
+            title = fetched["title"]
+            text = fetched["text"]
             chunks = self._finalize_chunks(self._build_plain_text_chunks(text))
             self._complete_ingestion(
                 source_id=source.id,
@@ -191,6 +151,8 @@ class SourceService:
                 chunks=chunks,
                 reason="source_refreshed",
             )
+            if fetched["canonical_uri"] != source.canonical_uri:
+                self.repository.update_web_source_url(source.id, fetched["canonical_uri"])
         except Exception as exc:
             self.repository.finalize_source_failure(
                 source_id=source.id,
@@ -205,7 +167,7 @@ class SourceService:
 
     def update_web_source(self, source_id: str, url: str) -> dict:
         try:
-            updated = self.repository.update_web_source_url(source_id, url)
+            updated = self.repository.update_web_source_url(source_id, self.web_research.normalize_url(url))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if updated is None:
@@ -408,18 +370,8 @@ class SourceService:
         return " ".join(part for part in parts if part)
 
     def _fetch_web_content(self, url: str) -> tuple[str, str]:
-        with httpx.Client(timeout=15.0, follow_redirects=True, trust_env=False) as client:
-            response = client.get(url)
-            response.raise_for_status()
-
-        parser = _HTMLTextExtractor()
-        parser.feed(response.text)
-
-        title = parser.title or url
-        text = parser.text.strip()
-        if not text:
-            raise ValueError("No readable body content was extracted from the page.")
-        return title, text
+        fetched = self.web_research.fetch(url=url)
+        return fetched["title"], fetched["text"]
 
     def _build_plain_text_chunks(self, text: str, max_chars: int = 900) -> list[dict]:
         paragraphs = [paragraph.strip() for paragraph in text.splitlines() if paragraph.strip()]

@@ -483,3 +483,14 @@ Verified
 - Backend V3 runtime regression passed after Phase A:
   - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_agentic_v3.py -q
   - 5 tests passed
+
+Completed Feature Slice
+- Implemented the V3.1 Phase B web-supplement quality upgrade:
+  - `WebResearchService` now normalizes URLs, removes common tracking params, deduplicates external candidates, and cleans weak boilerplate from fetched pages
+  - saving an external page into the knowledge base now reuses the same project source when the page only differs by tracking params or final canonical URL
+  - grounded evidence fusion now keeps project evidence ahead of external-web evidence for normal grounded answers, with web staying as a supplement rather than replacing project truth
+
+Verified
+- Backend web-supplement regression passed after Phase B:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_agentic_v3.py tests/backend/test_grounded_rag.py::test_grounded_generation_keeps_project_evidence_ahead_of_external_web -q
+  - 7 tests passed

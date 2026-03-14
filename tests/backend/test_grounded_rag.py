@@ -864,3 +864,102 @@ def test_grounded_generation_rejects_low_confidence_second_pass_false_positives(
     assert augmented is not None
     assert augmented["selection"]["selected_candidate_count"] == 0
     assert augmented["selection"]["rejection_reason"] == "low_confidence_delivery_candidate"
+
+
+def test_grounded_generation_keeps_project_evidence_ahead_of_external_web():
+    grounded_generation = sessions_route_service.grounded_generation
+    project_hits = [
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-project-1",
+            "source_id": "source-1",
+            "source_kind": "project_source",
+            "source_title": "Quest 3 Notes",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///quest3.docx",
+            "location_label": "默认手柄 #1",
+            "excerpt": "默认手柄：Touch Plus 控制器",
+            "normalized_text": "默认手柄：Touch Plus 控制器",
+            "relevance_score": 4.5,
+            "section_type": "field",
+            "heading_path": "设备配置",
+            "field_label": "默认手柄",
+            "table_origin": None,
+            "proposition_type": "identity",
+        },
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-project-2",
+            "source_id": "source-2",
+            "source_kind": "project_source",
+            "source_title": "Quest 3 Spec",
+            "source_type": "file_pdf",
+            "canonical_uri": "file:///quest3-spec.pdf",
+            "location_label": "设备配置 #1",
+            "excerpt": "Quest 3 随机附带 Touch Plus 控制器。",
+            "normalized_text": "Quest 3 随机附带 Touch Plus 控制器。",
+            "relevance_score": 4.1,
+            "section_type": "body",
+            "heading_path": "设备配置",
+            "field_label": None,
+            "table_origin": None,
+            "proposition_type": None,
+        },
+    ]
+    external_hits = [
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": None,
+            "source_id": None,
+            "source_kind": "external_web",
+            "source_title": "Quest 3 Blog",
+            "source_type": "web_page",
+            "canonical_uri": "https://example.com/quest3-blog",
+            "external_uri": "https://example.com/quest3-blog",
+            "location_label": "网页补充 #1",
+            "excerpt": "External blog summary about Touch Plus.",
+            "normalized_text": "External blog summary about Touch Plus.",
+            "relevance_score": 5.2,
+            "section_type": "body",
+            "heading_path": None,
+            "field_label": None,
+            "table_origin": None,
+            "proposition_type": None,
+        }
+    ]
+    diagnostics = {
+        "original_query": "Quest 3 默认手柄是什么？",
+        "context_clues": [],
+        "first_pass": {
+            "hit_count": len(project_hits),
+            "top_score": 4.5,
+            "title_hit_count": 1,
+            "field_hit_count": 1,
+            "term_coverage_ratio": 1.0,
+            "is_low_confidence": False,
+        },
+        "triggered_second_pass": False,
+        "retry_steps": [],
+        "final": {
+            "hit_count": len(project_hits),
+            "source_count": 2,
+            "grounded_candidate": True,
+            "returned_hit_count": len(project_hits),
+        },
+    }
+
+    packed, packed_diagnostics = grounded_generation.prepare_agent_evidence(
+        query="Quest 3 默认手柄是什么？",
+        project_hits=project_hits,
+        project_diagnostics=diagnostics,
+        research_mode=False,
+        external_hits=external_hits,
+    )
+
+    assert packed
+    assert packed[0]["source_kind"] == "project_source"
+    assert all(item["source_kind"] == "project_source" for item in packed)
+    assert packed_diagnostics["final"]["external_source_count"] == 0
