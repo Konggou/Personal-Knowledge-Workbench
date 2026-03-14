@@ -378,6 +378,8 @@ Qdrant 是默认向量索引层。
 - grounded evidence fusion keeps project evidence primary:
   - normal grounded delivery only allows external-web evidence when project hits still leave a gap
   - research delivery can keep a small external supplement budget, but project evidence still ranks first
+ - readiness checking now also understands external-only evidence:
+   - when project retrieval is empty but manual web supplementation returns a strong enough evidence pack, `pre_answer_check` can proceed instead of forcing an unnecessary fallback
 
 ### 10.5 Public Contract Changes
 
@@ -436,3 +438,7 @@ Qdrant 是默认向量索引层。
   - retrieval diagnostics
   - grounded-delivery diagnostics
 - These diagnostics remain internal and are intentionally not exposed through public API payloads or frontend SSE contracts.
+- V3.1 extends this into an agentic eval layer:
+  - `run_agentic_eval` covers project-only grounding, web supplement, memory-assisted follow-up, bounded retry, project/web conflict, and weak-source fallback
+  - `run_v3_eval` combines the retrieval suite and the agentic suite into one local JSON report
+  - the agentic suite forces heuristic planner/checker behavior so local regression results stay comparable even when an external LLM is configured

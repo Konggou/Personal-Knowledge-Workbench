@@ -374,6 +374,13 @@
   - normal grounded delivery keeps project evidence ahead of supplemental web evidence
   - external-only grounded turns do not leak into project memory
   - contextual follow-up memory lookup prefers session scope
+  - deterministic agentic eval coverage for:
+    - project-only grounding
+    - project + web supplement
+    - memory-assisted follow-up
+    - bounded pre-check retry
+    - project/web conflict with project priority
+    - weak-source fallback readiness
   - frontend composer toggle behavior
   - mixed project/web source rendering
   - retrieval scoring now considers `section_type`, `heading_path`, `field_label`, and `table_origin`
@@ -430,3 +437,8 @@
 - Current design boundaries:
   - eval output is for local/dev use and is not exposed through public API routes
   - observability stays file/CLI driven rather than becoming a production monitoring surface
+- V3.1 Phase D extends the same eval surface rather than inventing a second observability stack:
+  - `run_retrieval_eval` keeps the structured retrieval/delivery cases
+  - `run_agentic_eval` adds graph/web/memory/pre-check cases with deterministic heuristic gating
+  - `run_v3_eval` combines both suites for one local comparison run
+  - the readiness checker now accepts sufficiently strong external-only evidence when project retrieval is empty

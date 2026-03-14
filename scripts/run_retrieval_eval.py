@@ -18,8 +18,14 @@ if str(API_DIR) not in sys.path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the local retrieval evaluation suite and print JSON results.")
+    parser = argparse.ArgumentParser(description="Run the local retrieval and agentic evaluation suites.")
     parser.add_argument("--output", type=Path, default=None, help="Optional path to write the JSON result payload.")
+    parser.add_argument(
+        "--suite",
+        choices=("retrieval", "agentic", "all"),
+        default="all",
+        help="Choose which evaluation suite to run.",
+    )
     args = parser.parse_args()
 
     with TemporaryDirectory(prefix="workbench-retrieval-eval-") as temp_dir:
@@ -32,12 +38,17 @@ def main() -> int:
         import app.core.database as database_module
         import app.core.settings as settings_module
         from app.main import app
-        from app.services.retrieval_eval_service import run_retrieval_eval
+        from app.services.retrieval_eval_service import run_agentic_eval, run_retrieval_eval, run_v3_eval
 
         database_module.initialize_database()
         with patch("app.services.vector_store.VectorStore.search", lambda self, *, query, project_id, limit: []):
             with TestClient(app) as client:
-                result = run_retrieval_eval(client)
+                if args.suite == "retrieval":
+                    result = run_retrieval_eval(client)
+                elif args.suite == "agentic":
+                    result = run_agentic_eval(client)
+                else:
+                    result = run_v3_eval(client)
 
         payload = json.dumps(result, ensure_ascii=False, indent=2)
         if args.output is not None:

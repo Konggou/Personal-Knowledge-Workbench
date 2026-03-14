@@ -505,3 +505,25 @@ Verified
 - Backend memory regression passed after Phase C:
   - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_agentic_v3.py -q
   - 8 tests passed
+
+Completed Feature Slice
+- Implemented the V3.1 Phase D eval + observability upgrade:
+  - `app.services.retrieval_eval_service` now includes a dedicated agentic eval suite beside the existing retrieval suite
+  - the new agentic cases cover:
+    - project-only grounding
+    - project + web supplement
+    - memory-assisted follow-up
+    - bounded pre-answer retry
+    - project/web conflict with project-priority fusion
+    - weak-source fallback readiness
+  - `scripts/run_retrieval_eval.py` now supports `--suite retrieval|agentic|all`, and `--suite all` emits one combined V3 JSON report
+  - fixed a V3 readiness-check bug where strong external-only evidence could still be misclassified as `insufficient`
+  - stabilized V3 graph regression tests by making retry-path assertions depend on explicit checker stubs instead of ambient LLM behavior
+
+Verified
+- Backend eval + graph regression passed after Phase D:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_retrieval_eval.py tests/backend/test_agentic_v3.py -q
+  - 12 tests passed
+- Combined V3 eval runner passed:
+  - apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all
+  - 13 / 13 cases passed

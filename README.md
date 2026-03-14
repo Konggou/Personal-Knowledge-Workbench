@@ -158,7 +158,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 ```powershell
 apps/api/.venv/Scripts/python.exe -m compileall apps/api/app
 apps/api/.venv/Scripts/python.exe -m pytest tests/backend
-apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py
+apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all
 ```
 
 ### 前端

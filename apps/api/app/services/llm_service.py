@@ -568,16 +568,23 @@ class LLMService:
         candidate_count = int(selection.get("input_candidate_count", len(evidence_pack)) or len(evidence_pack))
         selected_count = int(final.get("selected_evidence_count", len(evidence_pack)) or len(evidence_pack))
         project_hits = [item for item in evidence_pack if item.get("source_kind") != "external_web"]
+        external_hits = [item for item in evidence_pack if item.get("source_kind") == "external_web"]
         strong_structured_hits = [
             item
             for item in project_hits
             if str(item.get("section_type") or "body") in {"field", "proposition"}
         ]
+        external_top_score = max((float(item.get("relevance_score", 0.0)) for item in external_hits), default=0.0)
 
         if not evidence_pack:
             if web_browsing_enabled and not web_used:
                 return {"action": "need_web", "reason": "no_evidence", "focus": query}
             return {"action": "insufficient", "reason": "no_evidence", "focus": query}
+
+        if not project_hits and external_hits:
+            if external_top_score >= 2.8 or len(external_hits) >= 2:
+                return {"action": "proceed", "reason": "external_evidence_ready", "focus": ""}
+            return {"action": "insufficient", "reason": "weak_external_evidence", "focus": query}
 
         if (
             project_retry_count < 1

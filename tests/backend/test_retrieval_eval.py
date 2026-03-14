@@ -2,8 +2,8 @@ from io import BytesIO
 
 from docx import Document
 
+from app.services.retrieval_eval_service import run_agentic_eval, run_retrieval_eval, run_v3_eval
 from app.services.search_service import SearchService
-from app.services.retrieval_eval_service import run_retrieval_eval
 
 
 def _create_project(client, *, name: str = "Retrieval Eval Project") -> dict:
@@ -70,14 +70,14 @@ def test_v21_minimal_retrieval_eval_set(client, monkeypatch):
     service = SearchService()
     cases = [
         {
-            "query": "我的题目是什么",
+            "query": "我的题目是什么？",
             "history": None,
             "expect_grounded": True,
             "expect_second_pass": False,
         },
         {
-            "query": "现在你知道了吗",
-            "history": [{"role": "user", "content_md": "我的开题报告题目是什么"}],
+            "query": "现在你知道了吗？",
+            "history": [{"role": "user", "content_md": "我的开题报告题目是什么？"}],
             "expect_grounded": True,
             "expect_second_pass": True,
         },
@@ -140,3 +140,46 @@ def test_v24_retrieval_eval_runner_returns_structured_results(client, monkeypatc
     unrelated = next(item for item in report["results"] if item["case_id"] == "unrelated_weather")
     assert unrelated["grounded_candidate"] is False
     assert unrelated["status"] == "passed"
+
+
+def test_v31_agentic_eval_runner_returns_v3_structured_results(client, monkeypatch):
+    monkeypatch.setattr("app.services.vector_store.VectorStore.search", lambda self, *, query, project_id, limit: [])
+
+    report = run_agentic_eval(client)
+
+    assert report["case_count"] >= 7
+    assert report["passed_case_count"] >= 6
+    case_ids = {item["case_id"] for item in report["results"]}
+    assert "project_only_grounding" in case_ids
+    assert "project_plus_web_supplement" in case_ids
+    assert "memory_assisted_follow_up" in case_ids
+    assert "precheck_retry_project_once" in case_ids
+
+    web_case = next(item for item in report["results"] if item["case_id"] == "project_plus_web_supplement")
+    assert web_case["used_web"] is True
+    assert web_case["primary_source_kind"] == "external_web"
+    assert web_case["status"] == "passed"
+
+    memory_case = next(item for item in report["results"] if item["case_id"] == "memory_assisted_follow_up")
+    assert memory_case["memory_note_count"] >= 1
+    assert memory_case["status"] == "passed"
+
+    retry_case = next(item for item in report["results"] if item["case_id"] == "precheck_retry_project_once")
+    assert retry_case["project_retry_count"] == 1
+    assert len(retry_case["query_trace"]) >= 2
+    assert retry_case["status"] == "passed"
+
+    weak_case = next(item for item in report["results"] if item["case_id"] == "weak_source_mode_ready")
+    assert weak_case["grounded_candidate"] is False
+    assert weak_case["readiness_action"] == "insufficient"
+
+
+def test_v31_combined_v3_eval_runner_includes_retrieval_and_agentic(client, monkeypatch):
+    monkeypatch.setattr("app.services.vector_store.VectorStore.search", lambda self, *, query, project_id, limit: [])
+
+    report = run_v3_eval(client)
+
+    assert report["suite"] == "v3"
+    assert report["retrieval"]["case_count"] >= 6
+    assert report["agentic"]["case_count"] >= 7
+    assert report["passed_case_count"] >= 11

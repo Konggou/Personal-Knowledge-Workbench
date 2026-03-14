@@ -410,6 +410,19 @@ def test_v3_pre_answer_check_can_retry_project_retrieval_once(client, monkeypatc
         "retrieve_project_evidence_with_diagnostics",
         fake_retrieve,
     )
+    readiness_calls = {"count": 0}
+    monkeypatch.setattr(
+        sessions_route_service.llm,
+        "check_agent_answer_readiness",
+        lambda **kwargs: (
+            readiness_calls.__setitem__("count", readiness_calls["count"] + 1)
+            or {
+                "action": "retry_project" if readiness_calls["count"] == 1 else "proceed",
+                "reason": "project_evidence_not_focused" if readiness_calls["count"] == 1 else "evidence_ready",
+                "focus": "Quest 3 默认手柄是什么？" if readiness_calls["count"] == 1 else "",
+            }
+        ),
+    )
     monkeypatch.setattr(
         sessions_route_service.llm,
         "generate_grounded_reply",
