@@ -359,10 +359,13 @@
   - `memory_entries` persistence
   - `message_sources.source_kind`
   - `message_sources.external_uri`
+  - bounded `retry_project` recovery before final generation
+  - richer internal graph diagnostics (`plan`, `query_trace`, `pre_answer_check`)
 - V3 regression coverage now includes:
   - graph runtime fallback to V2
   - web branch disabled / enabled behavior
   - memory persistence after successful grounded answers
+  - bounded project-evidence retry when the first grounded pack is still too weak
   - frontend composer toggle behavior
   - mixed project/web source rendering
   - retrieval scoring now considers `section_type`, `heading_path`, `field_label`, and `table_origin`

@@ -336,6 +336,10 @@ Qdrant 是默认向量索引层。
     - `load_turn_context -> load_memory -> classify_turn -> project_retrieval -> optional_web_branch -> evidence_selection -> pre_answer_check`
   - `research_graph`
     - `load_turn_context -> load_memory -> plan_turn -> project_retrieval -> optional_web_branch -> fuse_evidence -> pre_answer_check`
+- `pre_answer_check` now supports one bounded project-side retry before generation:
+  - if evidence is present but still not focused enough, the graph can re-run project retrieval once with a refined focus query
+  - if evidence is still insufficient and web supplementation is allowed, the graph may branch to web once
+  - internal diagnostics record `query_trace`, retry counts, and the final readiness decision
 - The graph never becomes a public “agent platform” surface.
 
 ### 10.3 Tools / Subsystems

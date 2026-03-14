@@ -232,11 +232,15 @@ class LLMService:
         complexity = str(payload.get("complexity", "complex" if research_mode else "simple")).strip().lower()
         if complexity not in {"simple", "complex"}:
             complexity = "complex" if research_mode else "simple"
+        task_type = str(payload.get("task_type", "summarize" if research_mode else "lookup")).strip().lower()
+        if task_type not in {"lookup", "follow_up", "summarize", "compare", "explain"}:
+            task_type = "summarize" if research_mode else "lookup"
         return {
             "working_query": str(payload.get("working_query", "")).strip() or query,
             "summary": str(payload.get("summary", "")).strip() or ("structured_research" if research_mode else "chat_turn"),
             "should_use_web": bool(payload.get("should_use_web", False)) and web_browsing,
             "complexity": complexity,
+            "task_type": task_type,
         }
 
     def check_agent_answer_readiness(
@@ -248,6 +252,8 @@ class LLMService:
         research_mode: bool,
         web_browsing_enabled: bool,
         web_used: bool,
+        diagnostics: dict | None = None,
+        project_retry_count: int = 0,
     ) -> dict:
         if not self.is_configured():
             return self._heuristic_check_agent_answer_readiness(
@@ -256,6 +262,8 @@ class LLMService:
                 research_mode=research_mode,
                 web_browsing_enabled=web_browsing_enabled,
                 web_used=web_used,
+                diagnostics=diagnostics,
+                project_retry_count=project_retry_count,
             )
         messages = self._build_pre_answer_check_messages(
             query=query,
@@ -264,6 +272,8 @@ class LLMService:
             research_mode=research_mode,
             web_browsing_enabled=web_browsing_enabled,
             web_used=web_used,
+            diagnostics=diagnostics or {},
+            project_retry_count=project_retry_count,
         )
         try:
             raw_text = self._complete_messages(messages=messages, temperature=0.1)
@@ -275,10 +285,12 @@ class LLMService:
                 research_mode=research_mode,
                 web_browsing_enabled=web_browsing_enabled,
                 web_used=web_used,
+                diagnostics=diagnostics,
+                project_retry_count=project_retry_count,
             )
 
         action = str(payload.get("action", "proceed")).strip().lower()
-        if action not in {"proceed", "need_web", "insufficient"}:
+        if action not in {"proceed", "need_web", "retry_project", "insufficient"}:
             action = "proceed"
         return {
             "action": action,
@@ -435,12 +447,13 @@ class LLMService:
         prompt = (
             "你在为一个聊天优先的个人知识工作台规划本轮回答路径。"
             "\n请严格输出 JSON，不要输出代码块。"
-            '\n{"working_query":"...","summary":"...","should_use_web":false,"complexity":"simple"}'
+            '\n{"working_query":"...","summary":"...","should_use_web":false,"complexity":"simple","task_type":"lookup"}'
             "\n规则："
             "\n1. 优先围绕当前问题生成更清晰的工作查询。"
             "\n2. 只有当网页补充开关已开启且你认为本轮需要外部补充时，should_use_web 才能为 true。"
             "\n3. complexity 只能是 simple 或 complex。"
-            "\n4. summary 用一句话概括本轮计划。"
+            "\n4. task_type 只能是 lookup / follow_up / summarize / compare / explain。"
+            "\n5. summary 用一句话概括本轮计划。"
             f"\n\n当前问题：\n{query}"
         )
         if memory_notes:
@@ -461,18 +474,23 @@ class LLMService:
         research_mode: bool,
         web_browsing_enabled: bool,
         web_used: bool,
+        diagnostics: dict,
+        project_retry_count: int,
     ) -> list[dict]:
         evidence_lines = []
         for index, item in enumerate(evidence_pack, start=1):
             evidence_lines.append(
                 f"[证据 {index}] title={item['source_title']} kind={item.get('source_kind', 'project_source')} excerpt={item['excerpt']}"
             )
+        first_pass = diagnostics.get("first_pass", {})
+        final = diagnostics.get("final", {})
         prompt = (
             "你要在回答生成前做一次检查。"
             "\n请严格输出 JSON，不要输出代码块。"
             '\n{"action":"proceed","reason":"...","focus":""}'
-            "\naction 只能是 proceed / need_web / insufficient。"
+            "\naction 只能是 proceed / retry_project / need_web / insufficient。"
             "\n当证据已经足够时用 proceed。"
+            "\n当项目证据已经命中，但还不够聚焦，且项目内还值得再筛一次时，用 retry_project。"
             "\n当网页补充已开启且当前证据明显不足，且还没用过网页时，用 need_web。"
             "\n当当前条件下无法补足证据时，用 insufficient。"
             f"\n\n当前问题：\n{query}"
@@ -480,6 +498,10 @@ class LLMService:
             f"\n\n模式：{'research' if research_mode else 'chat'}"
             f"\n网页补充开关：{'on' if web_browsing_enabled else 'off'}"
             f"\n本轮是否已使用网页：{'yes' if web_used else 'no'}"
+            f"\n项目重筛次数：{project_retry_count}"
+            f"\n首轮 top_score：{first_pass.get('top_score', 0.0)}"
+            f"\n首轮 term_coverage_ratio：{first_pass.get('term_coverage_ratio', 0.0)}"
+            f"\n最终 selected_evidence_count：{final.get('selected_evidence_count', len(evidence_pack))}"
             "\n\n当前证据：\n"
             + ("\n".join(evidence_lines) if evidence_lines else "(none)")
         )
@@ -496,14 +518,34 @@ class LLMService:
         research_mode: bool,
         web_browsing: bool,
     ) -> dict:
-        working_query = query
-        if memory_notes and self._query_looks_contextual(query):
-            working_query = f"{query} {' '.join(memory_notes[:2])}"
+        working_query = " ".join(query.split()).strip()
+        contextual = self._query_looks_contextual(query)
+        complex_query = research_mode or self._query_looks_complex(query)
+        task_type = "lookup"
+        if contextual:
+            task_type = "follow_up"
+        elif any(keyword in query for keyword in ("总结", "梳理", "概括", "结论", "建议")):
+            task_type = "summarize"
+        elif any(keyword in query for keyword in ("对比", "区别", "差异", "比较")):
+            task_type = "compare"
+        elif any(keyword in query for keyword in ("为什么", "原因", "如何", "怎么")):
+            task_type = "explain"
+
+        if memory_notes and contextual:
+            working_query = f"{working_query} {' '.join(memory_notes[:2])}"
+
+        should_use_web = False
+        if web_browsing and (
+            research_mode
+            or any(keyword in query for keyword in ("联网", "官网", "最新", "外部", "行业", "公开资料", "benchmark", "基准"))
+        ):
+            should_use_web = True
         return {
             "working_query": " ".join(working_query.split()).strip(),
             "summary": "先检查项目资料，再视情况补充网页来源并整理结论" if web_browsing else "先检查项目资料并整理结论",
-            "should_use_web": bool(web_browsing and (research_mode or self._query_looks_contextual(query))),
-            "complexity": "complex" if research_mode or len(query) >= 40 else "simple",
+            "should_use_web": should_use_web,
+            "complexity": "complex" if complex_query else "simple",
+            "task_type": task_type,
         }
 
     def _heuristic_check_agent_answer_readiness(
@@ -514,14 +556,89 @@ class LLMService:
         research_mode: bool,
         web_browsing_enabled: bool,
         web_used: bool,
+        diagnostics: dict | None,
+        project_retry_count: int,
     ) -> dict:
+        diagnostics = diagnostics or {}
+        first_pass = diagnostics.get("first_pass", {})
+        selection = diagnostics.get("selection", {})
+        final = diagnostics.get("final", {})
+        top_score = float(first_pass.get("top_score", 0.0) or 0.0)
+        term_coverage_ratio = float(first_pass.get("term_coverage_ratio", 0.0) or 0.0)
+        candidate_count = int(selection.get("input_candidate_count", len(evidence_pack)) or len(evidence_pack))
+        selected_count = int(final.get("selected_evidence_count", len(evidence_pack)) or len(evidence_pack))
+        project_hits = [item for item in evidence_pack if item.get("source_kind") != "external_web"]
+        strong_structured_hits = [
+            item
+            for item in project_hits
+            if str(item.get("section_type") or "body") in {"field", "proposition"}
+        ]
+
         if not evidence_pack:
             if web_browsing_enabled and not web_used:
                 return {"action": "need_web", "reason": "no_evidence", "focus": query}
             return {"action": "insufficient", "reason": "no_evidence", "focus": query}
+
+        if (
+            project_retry_count < 1
+            and project_hits
+            and (
+                (
+                    candidate_count > selected_count
+                    and (
+                        (self._query_looks_complex(query) and len(project_hits) <= 1)
+                        or (top_score < 3.0 and term_coverage_ratio < 0.35 and not strong_structured_hits)
+                    )
+                )
+                or (
+                    len(project_hits) == 1
+                    and not strong_structured_hits
+                    and self._query_looks_factoid(query)
+                    and top_score < 3.2
+                )
+                or (top_score < 3.0 and term_coverage_ratio < 0.35 and not strong_structured_hits)
+            )
+        ):
+            return {
+                "action": "retry_project",
+                "reason": "project_evidence_not_focused",
+                "focus": self._build_retry_focus(query=query, evidence_pack=project_hits),
+            }
+
         if research_mode and len(evidence_pack) < 2 and web_browsing_enabled and not web_used:
             return {"action": "need_web", "reason": "thin_research_evidence", "focus": query}
+        if top_score < 2.2 and not strong_structured_hits:
+            if web_browsing_enabled and not web_used:
+                return {"action": "need_web", "reason": "weak_project_evidence", "focus": query}
+            return {"action": "insufficient", "reason": "weak_project_evidence", "focus": query}
         return {"action": "proceed", "reason": "evidence_ready", "focus": ""}
+
+    def _build_retry_focus(self, *, query: str, evidence_pack: list[dict]) -> str:
+        metadata_terms: list[str] = []
+        for item in evidence_pack[:3]:
+            for value in (item.get("field_label"), item.get("heading_path"), item.get("proposition_type")):
+                text = " ".join(str(value or "").split()).strip()
+                if text and text not in metadata_terms:
+                    metadata_terms.append(text)
+        if not metadata_terms:
+            return " ".join(query.split()).strip()
+        return " ".join([query, *metadata_terms[:2]]).strip()
+
+    def _query_looks_complex(self, query: str) -> bool:
+        normalized = " ".join(query.split()).lower()
+        if len(normalized) >= 40:
+            return True
+        return any(
+            keyword in normalized
+            for keyword in ("总结", "梳理", "比较", "区别", "差异", "建议", "结论", "原因", "为什么", "如何", "方案", "评估")
+        )
+
+    def _query_looks_factoid(self, query: str) -> bool:
+        normalized = " ".join(query.split()).lower()
+        return any(
+            keyword in normalized
+            for keyword in ("什么", "哪个", "哪种", "多少", "默认", "名称", "题目", "标题", "谁", "何时", "哪里")
+        )
 
     def _conversation_to_messages(self, conversation: list[dict]) -> list[dict]:
         messages: list[dict] = []

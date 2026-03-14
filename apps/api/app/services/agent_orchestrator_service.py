@@ -36,6 +36,10 @@ class AgentState(TypedDict, total=False):
     final_diagnostics: dict
     pre_answer_check: dict
     web_attempted: bool
+    web_attempt_count: int
+    project_retry_count: int
+    retry_focus: str
+    query_trace: list[dict]
 
 
 @dataclass
@@ -47,6 +51,7 @@ class AgentTurnResult:
     used_web: bool
     graph_profile: str
     plan_summary: str
+    readiness_action: str
 
 
 class AgentOrchestratorService:
@@ -96,17 +101,23 @@ class AgentOrchestratorService:
             "context_notes": [],
             "external_hits": [],
             "web_attempted": False,
+            "web_attempt_count": 0,
+            "project_retry_count": 0,
+            "retry_focus": "",
+            "query_trace": [],
         }
         graph = self._research_graph if research_mode else self._chat_graph
         result = graph.invoke(initial_state)
+        diagnostics = result.get("final_diagnostics") or result.get("project_diagnostics") or {}
         return AgentTurnResult(
             evidence_pack=result.get("final_evidence", []),
             context_notes=result.get("context_notes", []),
             status_messages=result.get("status_updates", []),
-            diagnostics=result.get("final_diagnostics") or result.get("project_diagnostics") or {},
+            diagnostics=diagnostics,
             used_web=bool(result.get("web_attempted")),
             graph_profile=result.get("graph_profile", "research" if research_mode else "chat"),
             plan_summary=result.get("plan", {}).get("summary", ""),
+            readiness_action=str(result.get("pre_answer_check", {}).get("action", "proceed")),
         )
 
     def persist_answer_memory(
@@ -158,6 +169,7 @@ class AgentOrchestratorService:
             "pre_answer_check",
             self._route_after_pre_answer_check,
             {
+                "retry_project": "project_retrieval",
                 "retry_web": "optional_web_branch",
                 "done": END,
             },
@@ -184,6 +196,7 @@ class AgentOrchestratorService:
             "pre_answer_check",
             self._route_after_pre_answer_check,
             {
+                "retry_project": "project_retrieval",
                 "retry_web": "optional_web_branch",
                 "done": END,
             },
@@ -232,8 +245,10 @@ class AgentOrchestratorService:
         return {"plan": plan}
 
     def _project_retrieval(self, state: AgentState) -> AgentState:
-        query = state.get("plan", {}).get("working_query") or state["query"]
-        limit = 12 if state["research_mode"] else 8
+        retry_focus = str(state.get("retry_focus") or "").strip()
+        query = retry_focus or state.get("plan", {}).get("working_query") or state["query"]
+        complexity = str(state.get("plan", {}).get("complexity", "simple"))
+        limit = 14 if state["research_mode"] else (10 if complexity == "complex" else 8)
         apply_rerank = True if state["research_mode"] else self.search.should_rerank_query(query)
         project_hits, diagnostics = self.search.retrieve_project_evidence_with_diagnostics(
             state["project_id"],
@@ -242,9 +257,33 @@ class AgentOrchestratorService:
             apply_rerank=apply_rerank,
             history=state["history"],
         )
+        query_trace = list(state.get("query_trace", []))
+        query_trace.append(
+            {
+                "stage": "project_retrieval",
+                "query": query,
+                "retry_index": int(state.get("project_retry_count", 0)),
+                "hit_count": len(project_hits),
+            }
+        )
+        diagnostics = self._augment_agentic_diagnostics(
+            state=state,
+            diagnostics=diagnostics,
+            query_trace=query_trace,
+        )
+        status_updates = list(state.get("status_updates", []))
+        if state.get("project_retry_count"):
+            status_updates = self._append_status(
+                state,
+                title="正在重新聚焦资料",
+                body="首轮证据还不够聚焦，正在按更明确的线索重新筛选项目资料。",
+            )
         return {
             "project_hits": project_hits,
             "project_diagnostics": diagnostics,
+            "query_trace": query_trace,
+            "status_updates": status_updates,
+            "retry_focus": "",
         }
 
     def _optional_web_branch(self, state: AgentState) -> AgentState:
@@ -252,31 +291,42 @@ class AgentOrchestratorService:
             return {}
         if not self._should_attempt_web(state):
             return {}
+        query = state.get("retry_focus") or state.get("plan", {}).get("working_query") or state["query"]
         external_hits = self.web.build_external_evidence(
             project_id=state["project_id"],
             project_name=state["project_name"],
-            query=state.get("plan", {}).get("working_query") or state["query"],
+            query=query,
             limit=get_settings().agent_web_result_limit,
         )
-        status_updates = state.get("status_updates", [])
+        status_updates = list(state.get("status_updates", []))
         if external_hits:
             status_updates = self._append_status(
                 state,
                 title="正在联网补充",
                 body="已找到可补充的网页资料，正在提炼与当前问题最相关的部分。",
             )
+        query_trace = list(state.get("query_trace", []))
+        query_trace.append(
+            {
+                "stage": "web_supplement",
+                "query": query,
+                "retry_index": int(state.get("web_attempt_count", 0)),
+                "hit_count": len(external_hits),
+            }
+        )
         return {
             "external_hits": external_hits,
             "web_attempted": True,
+            "web_attempt_count": int(state.get("web_attempt_count", 0)) + 1,
             "status_updates": status_updates,
+            "query_trace": query_trace,
         }
 
     def _evidence_selection(self, state: AgentState) -> AgentState:
         final_evidence, diagnostics = self.grounded_generation.prepare_agent_evidence(
             query=state["query"],
             project_hits=state.get("project_hits", []),
-            project_diagnostics=state.get("project_diagnostics")
-            or self._empty_diagnostics(state["query"]),
+            project_diagnostics=state.get("project_diagnostics") or self._empty_diagnostics(state["query"]),
             research_mode=state["research_mode"],
             external_hits=state.get("external_hits", []),
         )
@@ -285,6 +335,11 @@ class AgentOrchestratorService:
             title="正在整理结论",
             body="正在整合命中的项目资料和补充证据，准备生成回答。",
         )
+        diagnostics = self._augment_agentic_diagnostics(
+            state=state,
+            diagnostics=diagnostics,
+            query_trace=list(state.get("query_trace", [])),
+        )
         return {
             "final_evidence": final_evidence,
             "final_diagnostics": diagnostics,
@@ -292,6 +347,7 @@ class AgentOrchestratorService:
         }
 
     def _pre_answer_check(self, state: AgentState) -> AgentState:
+        diagnostics = state.get("final_diagnostics") or state.get("project_diagnostics") or self._empty_diagnostics(state["query"])
         check = self.llm.check_agent_answer_readiness(
             query=state["query"],
             evidence_pack=state.get("final_evidence", []),
@@ -299,11 +355,42 @@ class AgentOrchestratorService:
             research_mode=state["research_mode"],
             web_browsing_enabled=bool(state.get("web_browsing") and state.get("project_allows_external")),
             web_used=bool(state.get("web_attempted")),
+            diagnostics=diagnostics,
+            project_retry_count=int(state.get("project_retry_count", 0)),
         )
-        return {"pre_answer_check": check}
+        next_retry_focus = ""
+        next_project_retry_count = int(state.get("project_retry_count", 0))
+        status_updates = list(state.get("status_updates", []))
+        if check.get("action") == "retry_project" and next_project_retry_count < 1:
+            next_retry_focus = str(check.get("focus") or state.get("plan", {}).get("working_query") or state["query"]).strip()
+            next_project_retry_count += 1
+            status_updates = self._append_status(
+                state,
+                title="正在重新聚焦资料",
+                body="首轮证据还不够聚焦，正在按更明确的线索重新筛选项目资料。",
+            )
+        updated_diagnostics = self._augment_agentic_diagnostics(
+            state={
+                **state,
+                "project_retry_count": next_project_retry_count,
+            },
+            diagnostics=diagnostics,
+            query_trace=list(state.get("query_trace", [])),
+            pre_answer_check=check,
+        )
+        return {
+            "pre_answer_check": check,
+            "retry_focus": next_retry_focus,
+            "project_retry_count": next_project_retry_count,
+            "status_updates": status_updates,
+            "project_diagnostics": updated_diagnostics,
+            "final_diagnostics": updated_diagnostics,
+        }
 
     def _route_after_pre_answer_check(self, state: AgentState) -> str:
         check = state.get("pre_answer_check", {})
+        if check.get("action") == "retry_project" and str(state.get("retry_focus") or "").strip():
+            return "retry_project"
         if (
             check.get("action") == "need_web"
             and state.get("web_browsing")
@@ -340,6 +427,31 @@ class AgentOrchestratorService:
         current.append({"title": title, "content_md": body})
         return current
 
+    def _augment_agentic_diagnostics(
+        self,
+        *,
+        state: AgentState,
+        diagnostics: dict,
+        query_trace: list[dict],
+        pre_answer_check: dict | None = None,
+    ) -> dict:
+        agentic = {
+            **diagnostics.get("agentic", {}),
+            "graph_profile": state.get("graph_profile", "chat"),
+            "plan": state.get("plan", {}),
+            "query_trace": query_trace,
+            "project_retry_count": int(state.get("project_retry_count", 0)),
+            "web_attempt_count": int(state.get("web_attempt_count", 0)),
+            "web_attempted": bool(state.get("web_attempted")),
+            "memory_note_count": len(state.get("context_notes", [])),
+        }
+        if pre_answer_check is not None:
+            agentic["pre_answer_check"] = pre_answer_check
+        return {
+            **diagnostics,
+            "agentic": agentic,
+        }
+
     def _empty_diagnostics(self, query: str) -> dict:
         return {
             "original_query": query,
@@ -359,5 +471,14 @@ class AgentOrchestratorService:
                 "source_count": 0,
                 "grounded_candidate": False,
                 "returned_hit_count": 0,
+            },
+            "agentic": {
+                "graph_profile": "chat",
+                "plan": {},
+                "query_trace": [],
+                "project_retry_count": 0,
+                "web_attempt_count": 0,
+                "web_attempted": False,
+                "memory_note_count": 0,
             },
         }

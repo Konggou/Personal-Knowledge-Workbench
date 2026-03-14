@@ -471,3 +471,15 @@ Verified
 - Playwright E2E passed after V2.4 coverage expansion:
   - corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts
   - 6 tests passed
+
+Completed Feature Slice
+- Implemented the V3.1 Phase A runtime-intelligence upgrade:
+  - `AgentOrchestratorService` now records internal graph diagnostics for `plan`, `query_trace`, retry counts, and readiness-check output
+  - pre-answer checking can trigger one bounded `retry_project` pass before final generation when the first evidence pack is still too weak or too generic
+  - planner/checker heuristics now classify factoid / follow-up / summary style questions more explicitly and keep retry behavior bounded
+  - status cards now use stable chat-first copy for project retrieval, refocus, web supplementation, and answer assembly
+
+Verified
+- Backend V3 runtime regression passed after Phase A:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_agentic_v3.py -q
+  - 5 tests passed

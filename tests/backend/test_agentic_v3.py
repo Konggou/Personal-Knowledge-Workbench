@@ -34,17 +34,24 @@ def _create_web_source(client, project_id: str, html_server: dict, filename: str
     return response.json()["item"]
 
 
-def _diagnostics_for(evidence: list[dict], *, grounded_candidate: bool = True) -> dict:
-    top_score = max((float(item.get("relevance_score", 0.0)) for item in evidence), default=0.0)
+def _diagnostics_for(
+    evidence: list[dict],
+    *,
+    grounded_candidate: bool = True,
+    top_score: float | None = None,
+    term_coverage_ratio: float = 1.0,
+    input_candidate_count: int | None = None,
+) -> dict:
+    inferred_top_score = top_score if top_score is not None else max((float(item.get("relevance_score", 0.0)) for item in evidence), default=0.0)
     return {
         "original_query": "test",
         "context_clues": [],
         "first_pass": {
             "hit_count": len(evidence),
-            "top_score": top_score,
+            "top_score": inferred_top_score,
             "title_hit_count": 1 if evidence else 0,
-            "field_hit_count": 0,
-            "term_coverage_ratio": 1.0 if evidence else 0.0,
+            "field_hit_count": sum(1 for item in evidence if item.get("section_type") == "field"),
+            "term_coverage_ratio": term_coverage_ratio if evidence else 0.0,
             "is_low_confidence": not grounded_candidate,
         },
         "triggered_second_pass": False,
@@ -54,11 +61,18 @@ def _diagnostics_for(evidence: list[dict], *, grounded_candidate: bool = True) -
             "source_count": len({item.get("source_id") or item.get("canonical_uri") for item in evidence}),
             "grounded_candidate": grounded_candidate and bool(evidence),
             "returned_hit_count": len(evidence),
+            "selected_evidence_count": len(evidence),
+        },
+        "selection": {
+            "input_candidate_count": input_candidate_count or len(evidence),
+            "selected_candidate_count": len(evidence),
+            "selector_applied": bool(input_candidate_count and input_candidate_count > len(evidence)),
+            "items": [],
         },
     }
 
 
-def _project_evidence(source: dict, *, excerpt: str) -> list[dict]:
+def _project_evidence(source: dict, *, excerpt: str, field_label: str = "默认手柄") -> list[dict]:
     return [
         {
             "project_id": source["project_id"],
@@ -76,7 +90,32 @@ def _project_evidence(source: dict, *, excerpt: str) -> list[dict]:
             "relevance_score": 4.4,
             "section_type": "field",
             "heading_path": "设备配置",
-            "field_label": "默认手柄",
+            "field_label": field_label,
+            "table_origin": None,
+            "proposition_type": None,
+        }
+    ]
+
+
+def _body_evidence(source: dict, *, excerpt: str, score: float = 2.6) -> list[dict]:
+    return [
+        {
+            "project_id": source["project_id"],
+            "project_name": source["project_name"],
+            "chunk_id": None,
+            "source_id": source["id"],
+            "source_kind": "project_source",
+            "source_title": source["title"],
+            "source_type": source["source_type"],
+            "canonical_uri": source["canonical_uri"],
+            "external_uri": None,
+            "location_label": "body #2",
+            "excerpt": excerpt,
+            "normalized_text": excerpt,
+            "relevance_score": score,
+            "section_type": "body",
+            "heading_path": "设备配置",
+            "field_label": None,
             "table_origin": None,
             "proposition_type": None,
         }
@@ -148,8 +187,7 @@ def test_v3_web_browsing_disabled_does_not_call_external_web_tool(client, monkey
         json={"content": "Quest 3 默认手柄是什么？", "deep_research": False, "web_browsing": False},
     )
     assert response.status_code == 200, response.text
-    detail = response.json()["item"]
-    answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
+    answer = next(item for item in response.json()["item"]["messages"] if item["message_type"] == "assistant_answer")
 
     assert called["web"] is False
     assert answer["source_mode"] == "project_grounded"
@@ -186,8 +224,7 @@ def test_v3_web_browsing_enabled_can_return_external_web_evidence(client, monkey
         json={"content": "请联网补充 benchmark 结论。", "deep_research": False, "web_browsing": True},
     )
     assert response.status_code == 200, response.text
-    detail = response.json()["item"]
-    answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
+    answer = next(item for item in response.json()["item"]["messages"] if item["message_type"] == "assistant_answer")
 
     assert answer["source_mode"] == "project_grounded"
     assert answer["sources"]
@@ -236,6 +273,69 @@ def test_v3_successful_grounded_answers_persist_memory_entries(client, monkeypat
     assert session_entries
     assert project_entries
     assert any("Touch Plus" in entry.fact_text for entry in project_entries)
+
+
+def test_v3_pre_answer_check_can_retry_project_retrieval_once(client, monkeypatch, html_server):
+    project = _create_project(client, name="Retry Project")
+    session = _create_session(client, project["id"])
+    source = _create_web_source(
+        client,
+        project["id"],
+        html_server,
+        "retry-source.html",
+        "Quest 3 Notes",
+        "Quest 3 ships with Touch Plus controllers by default.",
+    )
+    weak_hits = _body_evidence(source, excerpt="Quest 3 has a default controller configuration note.", score=2.6)
+    focused_hits = _project_evidence(source, excerpt="Quest 3 默认手柄是 Touch Plus 控制器。")
+    calls = {"count": 0}
+
+    def fake_retrieve(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return weak_hits, _diagnostics_for(
+                weak_hits,
+                grounded_candidate=True,
+                top_score=2.6,
+                term_coverage_ratio=0.2,
+                input_candidate_count=4,
+            )
+        return focused_hits, _diagnostics_for(
+            focused_hits,
+            grounded_candidate=True,
+            top_score=4.2,
+            term_coverage_ratio=0.8,
+            input_candidate_count=2,
+        )
+
+    monkeypatch.setattr(
+        sessions_route_service.search,
+        "retrieve_project_evidence_with_diagnostics",
+        fake_retrieve,
+    )
+    monkeypatch.setattr(
+        sessions_route_service.llm,
+        "generate_grounded_reply",
+        lambda **kwargs: {
+            "answer_md": "项目资料说明 Quest 3 默认手柄是 Touch Plus 控制器。",
+            "used_general_knowledge": False,
+            "evidence_status": "grounded",
+        },
+    )
+
+    response = client.post(
+        f"/api/v1/sessions/{session['id']}/messages",
+        json={"content": "Quest 3 默认手柄是什么？", "deep_research": False, "web_browsing": False},
+    )
+    assert response.status_code == 200, response.text
+
+    detail = response.json()["item"]
+    answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
+    statuses = [item for item in detail["messages"] if item["message_type"] == "status_card"]
+
+    assert calls["count"] == 2
+    assert answer["sources"][0]["source_kind"] == "project_source"
+    assert any(item["title"] == "正在重新聚焦资料" for item in statuses)
 
 
 def test_v2_runtime_flag_still_routes_to_legacy_send_flow(monkeypatch):
