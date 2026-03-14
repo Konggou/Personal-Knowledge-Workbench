@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from app.api.routes.sessions import service as sessions_route_service
+from app.services.memory_service import MemoryService
 from app.repositories.memory_repository import MemoryRepository
 
 
@@ -301,6 +302,74 @@ def test_v3_saving_same_external_url_reuses_existing_project_source(client, html
 
     sources = client.get(f"/api/v1/projects/{project['id']}/sources").json()["items"]
     assert len(sources) == 1
+
+
+def test_v3_external_only_answers_do_not_persist_project_memory(client, monkeypatch):
+    project = _create_project(client, name="External Memory Guard")
+    session = _create_session(client, project["id"])
+    external_hits = _external_evidence(project, excerpt="External benchmark notes from the web.")
+
+    monkeypatch.setattr(
+        sessions_route_service.search,
+        "retrieve_project_evidence_with_diagnostics",
+        lambda *args, **kwargs: ([], _diagnostics_for([], grounded_candidate=False)),
+    )
+    monkeypatch.setattr(
+        sessions_route_service.agent.web,
+        "build_external_evidence",
+        lambda **kwargs: external_hits,
+    )
+    monkeypatch.setattr(
+        sessions_route_service.llm,
+        "generate_grounded_reply",
+        lambda **kwargs: {
+            "answer_md": "我补充了网页 benchmark 结果，后续可以继续追问。",
+            "used_general_knowledge": False,
+            "evidence_status": "grounded",
+        },
+    )
+
+    response = client.post(
+        f"/api/v1/sessions/{session['id']}/messages",
+        json={"content": "请联网补充 benchmark 结论。", "deep_research": False, "web_browsing": True},
+    )
+    assert response.status_code == 200, response.text
+
+    repository = MemoryRepository()
+    session_entries = repository.list_scope_entries(scope_type="session", scope_id=session["id"])
+    project_entries = repository.list_scope_entries(scope_type="project", scope_id=project["id"])
+
+    assert session_entries
+    assert project_entries == []
+
+
+def test_v3_memory_lookup_prefers_session_scope_for_contextual_follow_up(client):
+    project = _create_project(client, name="Memory Lookup Project")
+    session = _create_session(client, project["id"])
+    service = MemoryService()
+
+    repository = MemoryRepository()
+    repository.upsert_entry(
+        scope_type="project",
+        scope_id=project["id"],
+        topic="默认手柄",
+        fact_text="Quest 3 默认手柄是 Touch Plus 控制器。",
+        salience=1.0,
+        source_message_id=None,
+    )
+    repository.upsert_entry(
+        scope_type="session",
+        scope_id=session["id"],
+        topic="recent_answer",
+        fact_text="刚才确认过 Quest 3 默认手柄是 Touch Plus 控制器。",
+        salience=1.0,
+        source_message_id=None,
+    )
+
+    lookup = service.lookup(project_id=project["id"], session_id=session["id"], query="那它默认配的就是这个吗？", limit=4)
+
+    assert lookup["notes"]
+    assert lookup["notes"][0].startswith("刚才确认过")
 
 
 def test_v3_pre_answer_check_can_retry_project_retrieval_once(client, monkeypatch, html_server):

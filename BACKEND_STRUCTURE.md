@@ -350,6 +350,8 @@ Qdrant 是默认向量索引层。
   - session and project scoped memory retrieval
 - `memory_write`
   - only after successful assistant answers
+  - project memory is only derived from project-backed evidence
+  - external-web evidence can help session memory for short follow-up continuity, but does not become project memory
 - `web_search` / `web_fetch`
   - only enabled when the user explicitly turns on `web_browsing`
   - URLs are normalized before fetch/save so tracking parameters do not create duplicate knowledge-base entries
@@ -366,6 +368,9 @@ Qdrant 是默认向量索引层。
   - `fact_text`
   - `salience`
   - `source_message_id`
+- lookup behavior:
+  - contextual follow-up queries give a small priority boost to session-scoped memory
+  - older or stale memory entries are slightly deprioritized during ranking
 - `message_sources` now supports mixed evidence kinds:
   - `source_kind = project_source | external_web`
   - `source_id` can be null for external web evidence

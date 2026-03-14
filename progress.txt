@@ -494,3 +494,14 @@ Verified
 - Backend web-supplement regression passed after Phase B:
   - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_agentic_v3.py tests/backend/test_grounded_rag.py::test_grounded_generation_keeps_project_evidence_ahead_of_external_web -q
   - 7 tests passed
+
+Completed Feature Slice
+- Implemented the V3.1 Phase C memory-quality upgrade:
+  - `MemoryService` now filters memory candidates more aggressively so unstable wording and uncertain phrasing are less likely to be persisted
+  - project memory is now written only from project-backed evidence, while external-web evidence stays session-scoped
+  - lookup scoring now prefers recent session memory for contextual follow-up queries and slightly deprioritizes stale entries
+
+Verified
+- Backend memory regression passed after Phase C:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_agentic_v3.py -q
+  - 8 tests passed
