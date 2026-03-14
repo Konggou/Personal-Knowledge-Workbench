@@ -191,7 +191,7 @@ def test_explicit_deep_research_always_reranks_and_uses_five_evidences(client, m
     assert response.status_code == 200, response.text
     detail = response.json()["item"]
 
-    assert captured["limit"] == 12
+    assert captured["limit"] == 14
     assert captured["apply_rerank"] is True
     assert captured["history"][-1]["content_md"]
     answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")

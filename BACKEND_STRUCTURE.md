@@ -356,6 +356,7 @@ Qdrant 是默认向量索引层。
   - only enabled when the user explicitly turns on `web_browsing`
   - URLs are normalized before fetch/save so tracking parameters do not create duplicate knowledge-base entries
   - fetched pages are lightly cleaned to remove obvious boilerplate, duplicate paragraphs, and weak navigation text
+  - if a page is structurally valid but extremely short, extraction now falls back to a lighter paragraph filter instead of failing ingestion outright
 - `read_source_context`
   - internal helper for source preview style context reads
 
@@ -439,6 +440,16 @@ Qdrant 是默认向量索引层。
   - grounded-delivery diagnostics
 - These diagnostics remain internal and are intentionally not exposed through public API payloads or frontend SSE contracts.
 - V3.1 extends this into an agentic eval layer:
-  - `run_agentic_eval` covers project-only grounding, web supplement, memory-assisted follow-up, bounded retry, project/web conflict, and weak-source fallback
-  - `run_v3_eval` combines the retrieval suite and the agentic suite into one local JSON report
-  - the agentic suite forces heuristic planner/checker behavior so local regression results stay comparable even when an external LLM is configured
+- `run_agentic_eval` covers project-only grounding, web supplement, memory-assisted follow-up, bounded retry, project/web conflict, and weak-source fallback
+- `run_v3_eval` combines the retrieval suite and the agentic suite into one local JSON report
+- the agentic suite forces heuristic planner/checker behavior so local regression results stay comparable even when an external LLM is configured
+
+## 13. V3 Final Frontend-Visible Delivery Notes
+
+- Source rendering in the chat view now stays chat-first while distinguishing evidence origins internally:
+  - project-backed evidence renders as `项目资料`
+  - manual web supplementation renders as `网页补充`
+- External web evidence can be manually saved into the knowledge base directly from the source list without exposing tool/runtime terminology.
+- V3 `chat_graph` keeps the V2 grounded-search contract for complex questions:
+  - non-research complex grounded turns still trigger rerank
+  - this remains an internal retrieval quality behavior, not a public-mode change

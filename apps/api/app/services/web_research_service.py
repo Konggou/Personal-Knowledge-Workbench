@@ -167,6 +167,9 @@ class WebResearchService:
         parser = _HTMLTextExtractor()
         parser.feed(response.text)
         text = self._clean_extracted_text(parser.text)
+        if not text:
+            # Fall back to shorter paragraphs for minimal fixtures and simple pages.
+            text = self._clean_extracted_text(parser.text, allow_short_lines=True)
         title = self._clean_title(parser.title or normalized_input_url)
         canonical_uri = self.normalize_url(str(response.url))
         if not text:
@@ -300,7 +303,7 @@ class WebResearchService:
             score += 1.0
         return round(score, 3)
 
-    def _clean_extracted_text(self, text: str) -> str:
+    def _clean_extracted_text(self, text: str, *, allow_short_lines: bool = False) -> str:
         paragraphs = []
         seen_lines: set[str] = set()
         for raw_line in text.splitlines():
@@ -308,7 +311,7 @@ class WebResearchService:
             if not line:
                 continue
             lowered = line.lower()
-            if len(line) < 24 and not re.search(r"[\u4e00-\u9fff]{6,}", line):
+            if not allow_short_lines and len(line) < 24 and not re.search(r"[\u4e00-\u9fff]{6,}", line):
                 continue
             if any(pattern in lowered for pattern in self._boilerplate_patterns):
                 continue

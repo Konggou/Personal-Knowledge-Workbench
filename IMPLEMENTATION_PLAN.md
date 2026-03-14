@@ -442,3 +442,22 @@
   - `run_agentic_eval` adds graph/web/memory/pre-check cases with deterministic heuristic gating
   - `run_v3_eval` combines both suites for one local comparison run
   - the readiness checker now accepts sufficiently strong external-only evidence when project retrieval is empty
+
+## 14. V3.1 Phase E - UX Polish And Final Delivery
+
+- Scope completed in this slice:
+  - chat source bubbles now distinguish `项目资料` and `网页补充` while preserving the existing lightweight source mental model
+  - external web evidence can be saved into the knowledge base directly from the source list, with stable in-chat success feedback and duplicate-save guarding
+  - Playwright mainline now covers:
+    - DOCX import plus structured Chinese follow-up in the same session
+    - manual web supplementation, saving the external page, and continuing the same session
+- Final delivery fixes completed during this slice:
+  - simple/minimal HTML pages now fall back to a lighter text extraction path instead of failing ingestion when the body is short but still meaningful
+  - V3 `chat_graph` now preserves the V2 rule that complex grounded questions still trigger rerank even without deep research
+- Final validation baseline:
+  - `apps/api/.venv/Scripts/python.exe -m pytest tests/backend -q`
+  - `apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all`
+  - `corepack pnpm --dir apps/web test -- --run`
+  - `corepack pnpm --dir apps/web build`
+  - `corepack pnpm --dir apps/web typecheck`
+  - `corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts`

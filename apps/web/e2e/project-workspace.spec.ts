@@ -6,8 +6,9 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 const fixtureUrl = "http://127.0.0.1:3311/source-article";
 const repoRoot = join(process.cwd(), "..", "..");
 const apiPython = join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe");
-const sendButtonName = /发送/;
-const sourceBubbleName = /1 个来源|2 个来源|3 个来源/;
+const sendButtonName = "发送";
+const sourceBubbleName = /来源/;
+const composerPlaceholder = "继续在这个项目里提问……";
 
 function uniqueSuffix() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -38,7 +39,15 @@ async function addFixtureSourceInsideChat(page: Page) {
   await page.getByRole("button", { name: "添加网页链接" }).click();
   await page.getByPlaceholder("https://example.com/article").fill(fixtureUrl);
   await page.getByRole("button", { name: "添加网页" }).click();
-  await expect(page.locator("main")).toContainText("已添加网页资料");
+  await expect(page.locator("main")).toContainText(/已添加网页资料。|已保存到知识库，可继续追问新资料。|网页资料已在知识库中/);
+}
+
+function jsonResponse(payload: unknown) {
+  return {
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(payload),
+  };
 }
 
 function createStructuredDocx(outputPath: string) {
@@ -84,7 +93,7 @@ test.describe("chat-first project flow", () => {
     await createSession(page);
     await addFixtureSourceInsideChat(page);
 
-    await page.getByPlaceholder("继续在这个项目里提问……").fill("What does the source say about lighthouse orchard benchmark?");
+    await page.getByPlaceholder(composerPlaceholder).fill("What does the source say about lighthouse orchard benchmark?");
     await page.getByRole("button", { name: sendButtonName }).click();
 
     await expect(page.locator("main")).toContainText("lighthouse orchard benchmark");
@@ -97,7 +106,7 @@ test.describe("chat-first project flow", () => {
     await createSession(page);
     await addFixtureSourceInsideChat(page);
 
-    await page.getByPlaceholder("继续在这个项目里提问……").fill("Summarize the lighthouse orchard benchmark evidence.");
+    await page.getByPlaceholder(composerPlaceholder).fill("Summarize the lighthouse orchard benchmark evidence.");
     await page.getByRole("button", { name: sendButtonName }).click();
     await expect(page.locator("main")).toContainText("lighthouse orchard benchmark");
 
@@ -136,7 +145,7 @@ test.describe("chat-first project flow", () => {
     await page.getByRole("button", { name: "进入聊天" }).click();
 
     await expect(page).toHaveURL(new RegExp(`/projects/${projectId}\\?sessionId=`));
-    await expect(page.getByPlaceholder("继续在这个项目里提问……")).toBeVisible();
+    await expect(page.getByPlaceholder(composerPlaceholder)).toBeVisible();
   });
 
   test("archives, restores, and deletes a source from the knowledge page", async ({ page }) => {
@@ -170,7 +179,8 @@ test.describe("chat-first project flow", () => {
     await expect(archivedCard).toBeHidden();
   });
 
-  test("imports a docx source and keeps the same session context", async ({ page }, testInfo) => {
+  test("imports a docx source and keeps structured follow-up in the same session", async ({ page }, testInfo) => {
+    test.slow();
     const docxPath = testInfo.outputPath("structured-e2e.docx");
     createStructuredDocx(docxPath);
 
@@ -179,9 +189,18 @@ test.describe("chat-first project flow", () => {
 
     await page.locator('input[type="file"]').setInputFiles(docxPath);
     await expect(page.locator("main")).toContainText("structured-e2e.docx");
-    await expect(page.locator("main")).toContainText("已添加文件资料");
-    await expect(page.getByPlaceholder("继续在这个项目里提问……")).toBeVisible();
+    await expect(page.locator("main")).toContainText("已添加文件资料。");
+    await expect(page.getByPlaceholder(composerPlaceholder)).toBeVisible();
     await expect(page.getByRole("button", { name: "增加资料" })).toBeVisible();
+    await expect(page).toHaveURL(/sessionId=/);
+
+    await page.getByPlaceholder(composerPlaceholder).fill("我的课题名称是什么？");
+    await page.getByRole("button", { name: sendButtonName }).click();
+    await expect(page.locator("main")).toContainText("STM32", { timeout: 45000 });
+
+    await page.getByPlaceholder(composerPlaceholder).fill("现在你知道我的题目是什么了吗？");
+    await page.getByRole("button", { name: sendButtonName }).click();
+    await expect(page.locator("main")).toContainText(/STM32|室内空气质量检测/, { timeout: 45000 });
     await expect(page).toHaveURL(/sessionId=/);
   });
 
@@ -191,10 +210,253 @@ test.describe("chat-first project flow", () => {
     await addFixtureSourceInsideChat(page);
 
     await page.getByRole("button", { name: "深度调研" }).click();
-    await page.getByPlaceholder("继续在这个项目里提问……").fill("请结合资料深度调研 lighthouse orchard benchmark。");
+    await page.getByPlaceholder(composerPlaceholder).fill("请结合资料深度调研 lighthouse orchard benchmark。");
     await page.getByRole("button", { name: sendButtonName }).click();
 
     await expect(page.locator("main")).toContainText(/深度调研|调研结论/);
+    await expect(page).toHaveURL(/sessionId=/);
+  });
+
+  test("uses web supplementation, saves the external page, and continues the same session", async ({ page }) => {
+    test.slow();
+    await createProject(page, "E2E Web Supplement");
+    await createSession(page);
+
+    const sessionUrl = new URL(page.url());
+    const projectId = sessionUrl.pathname.split("/").pop();
+    const sessionId = sessionUrl.searchParams.get("sessionId");
+    expect(projectId).toBeTruthy();
+    expect(sessionId).toBeTruthy();
+    if (!projectId || !sessionId) {
+      throw new Error("Failed to resolve project/session from URL.");
+    }
+
+    const now = new Date().toISOString();
+    let savedToKnowledge = false;
+    let currentMessages: Array<Record<string, unknown>> = [];
+
+    const buildUserMessage = (id: string, seqNo: number, content: string) => ({
+      id,
+      session_id: sessionId,
+      project_id: projectId,
+      seq_no: seqNo,
+      role: "user",
+      message_type: "user_prompt",
+      title: null,
+      content_md: content,
+      source_mode: null,
+      evidence_status: null,
+      disclosure_note: null,
+      status_label: null,
+      supports_summary: false,
+      supports_report: false,
+      related_message_id: null,
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+      sources: [],
+    });
+
+    const buildAssistantMessage = (
+      id: string,
+      seqNo: number,
+      content: string,
+      sources: Array<Record<string, unknown>>,
+    ) => ({
+      id,
+      session_id: sessionId,
+      project_id: projectId,
+      seq_no: seqNo,
+      role: "assistant",
+      message_type: "assistant_answer",
+      title: null,
+      content_md: content,
+      source_mode: "project_grounded",
+      evidence_status: "grounded",
+      disclosure_note: null,
+      status_label: null,
+      supports_summary: true,
+      supports_report: true,
+      related_message_id: null,
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+      sources,
+    });
+
+    const externalSource = {
+      id: "message-source-web-1",
+      source_id: null,
+      source_kind: "external_web",
+      chunk_id: null,
+      source_rank: 1,
+      source_type: "web_page",
+      source_title: "Workbench Fixture Article",
+      canonical_uri: fixtureUrl,
+      external_uri: fixtureUrl,
+      location_label: "网页补充 #1",
+      excerpt: "benchmark 结果显示 lighthouse orchard 在稳定性和误报率上表现更好。",
+      relevance_score: 4.4,
+    };
+
+    const projectSource = {
+      id: "message-source-project-1",
+      source_id: "saved-web-source-1",
+      source_kind: "project_source",
+      chunk_id: null,
+      source_rank: 1,
+      source_type: "web_page",
+      source_title: "Workbench Fixture Article",
+      canonical_uri: fixtureUrl,
+      external_uri: null,
+      location_label: "网页 #1",
+      excerpt: "benchmark 结果显示 lighthouse orchard 在稳定性和误报率上表现更好。",
+      relevance_score: 4.6,
+    };
+
+    const buildSessionDetail = () => ({
+      item: {
+        id: sessionId,
+        project_id: projectId,
+        project_name: "E2E Web Supplement",
+        title: "新会话",
+        title_source: "pending",
+        status: "active",
+        latest_message_at: now,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+        message_count: currentMessages.length,
+        messages: currentMessages,
+      },
+    });
+
+    await page.route(new RegExp(`/api/v1/sessions/${sessionId}$`), async (route) => {
+      await route.fulfill(jsonResponse(buildSessionDetail()));
+    });
+
+    await page.route(new RegExp(`/api/v1/projects/${projectId}/sources\\?include_archived=false$`), async (route) => {
+      await route.fulfill(
+        jsonResponse({
+          items: savedToKnowledge
+            ? [
+                {
+                  id: "saved-web-source-1",
+                  project_id: projectId,
+                  project_name: "E2E Web Supplement",
+                  source_type: "web_page",
+                  title: "Workbench Fixture Article",
+                  canonical_uri: fixtureUrl,
+                  original_filename: null,
+                  mime_type: null,
+                  ingestion_status: "ready",
+                  quality_level: "normal",
+                  refresh_strategy: "manual",
+                  last_refreshed_at: null,
+                  error_code: null,
+                  error_message: null,
+                  created_at: now,
+                  updated_at: now,
+                  archived_at: null,
+                  deleted_at: null,
+                  favicon_url: null,
+                },
+              ]
+            : [],
+        }),
+      );
+    });
+
+    await page.route(new RegExp(`/api/v1/projects/${projectId}/sources/web$`), async (route) => {
+      savedToKnowledge = true;
+      await route.fulfill(
+        jsonResponse({
+          item: {
+            id: "saved-web-source-1",
+            project_id: projectId,
+            project_name: "E2E Web Supplement",
+            source_type: "web_page",
+            title: "Workbench Fixture Article",
+            canonical_uri: fixtureUrl,
+            original_filename: null,
+            mime_type: null,
+            ingestion_status: "ready",
+            quality_level: "normal",
+            refresh_strategy: "manual",
+            last_refreshed_at: null,
+            error_code: null,
+            error_message: null,
+            created_at: now,
+            updated_at: now,
+            archived_at: null,
+            deleted_at: null,
+            favicon_url: null,
+          },
+        }),
+      );
+    });
+
+    await page.route(new RegExp(`/api/v1/sessions/${sessionId}/messages/stream$`), async (route) => {
+      const requestBody = JSON.parse(route.request().postData() ?? "{}") as { content?: string };
+      const content = requestBody.content ?? "";
+      if (content.includes("这个页面提到的 benchmark")) {
+        currentMessages = [
+          buildUserMessage("user-web-1", 1, `请联网补充并总结这个页面的 benchmark 结论：${fixtureUrl}`),
+          buildAssistantMessage(
+            "assistant-web-1",
+            2,
+            "这个 benchmark 页面提到 lighthouse orchard 在稳定性和误报率上表现更好。",
+            [externalSource],
+          ),
+          buildUserMessage("user-web-2", 3, "这个页面提到的 benchmark 重点是什么？"),
+          buildAssistantMessage(
+            "assistant-web-2",
+            4,
+            "保存后继续追问时，可以直接基于项目资料回答：benchmark 的重点是稳定性更高、误报率更低。",
+            [projectSource],
+          ),
+        ];
+        await route.fulfill({
+          status: 200,
+          contentType: "text/event-stream",
+          body: `event: done\ndata: ${JSON.stringify({ message: currentMessages[3] })}\n\n`,
+        });
+        return;
+      }
+
+      currentMessages = [
+        buildUserMessage("user-web-1", 1, `请联网补充并总结这个页面的 benchmark 结论：${fixtureUrl}`),
+        buildAssistantMessage(
+          "assistant-web-1",
+          2,
+          "这个 benchmark 页面提到 lighthouse orchard 在稳定性和误报率上表现更好。",
+          [externalSource],
+        ),
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `event: done\ndata: ${JSON.stringify({ message: currentMessages[1] })}\n\n`,
+      });
+    });
+
+    await page.getByRole("button", { name: "联网补充" }).click();
+    await page
+      .getByPlaceholder(composerPlaceholder)
+      .fill(`请联网补充并总结这个页面的 benchmark 结论：${fixtureUrl}`);
+    await page.getByRole("button", { name: sendButtonName }).click();
+
+    await expect(page.locator("main")).toContainText(/benchmark|误报率|稳定性|lighthouse orchard/i, { timeout: 45000 });
+    await expect(page.getByRole("button", { name: /网页来源/ })).toBeVisible({ timeout: 45000 });
+    await page.getByRole("button", { name: /网页来源/ }).click();
+    await expect(page.locator("main")).toContainText("网页补充");
+    await page.getByRole("button", { name: "保存到知识库" }).click();
+    await expect(page.locator("main")).toContainText(/已保存到知识库，可继续追问新资料。|已添加网页资料。|网页资料已在知识库中/);
+
+    await page.getByPlaceholder(composerPlaceholder).fill("这个页面提到的 benchmark 重点是什么？");
+    await page.getByRole("button", { name: sendButtonName }).click();
+
+    await expect(page.locator("main")).toContainText(/benchmark|误报率|稳定性/, { timeout: 45000 });
     await expect(page).toHaveURL(/sessionId=/);
   });
 });

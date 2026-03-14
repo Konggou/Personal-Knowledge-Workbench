@@ -59,6 +59,8 @@ export function ProjectChatClient({
   const [isStreamingMessage, setIsStreamingMessage] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [sourceNotice, setSourceNotice] = useState<string | null>(null);
+  const [savedExternalUris, setSavedExternalUris] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputId = `project-chat-file-input-${project.id}`;
 
@@ -80,6 +82,11 @@ export function ProjectChatClient({
 
   useEffect(() => {
     setBusySessionId(null);
+  }, [project.id, selectedSession?.id]);
+
+  useEffect(() => {
+    setSourceNotice(null);
+    setSavedExternalUris({});
   }, [project.id, selectedSession?.id]);
 
   const projectTree = useMemo(() => {
@@ -411,12 +418,19 @@ export function ProjectChatClient({
       return;
     }
     setSourceError(null);
+    setSourceNotice(null);
     try {
-      await createWebSource({
+      const savedSource = await createWebSource({
         projectId: project.id,
         url,
         sessionId: selectedSession.id,
       });
+      setSavedExternalUris((previous) => ({
+        ...previous,
+        [url]: true,
+        [savedSource.canonical_uri]: true,
+      }));
+      setSourceNotice("已保存到知识库，可继续追问新资料。");
       await refreshProjectSources();
       await refreshSelectedSession(selectedSession.id);
     } catch (caught) {
@@ -429,6 +443,7 @@ export function ProjectChatClient({
       return;
     }
     setSourceError(null);
+    setSourceNotice(null);
     try {
       await createWebSource({
         projectId: project.id,
@@ -438,6 +453,7 @@ export function ProjectChatClient({
       setWebUrl("");
       setShowWebForm(false);
       setShowAddSourceMenu(false);
+      setSourceNotice("已添加网页资料。");
       await refreshProjectSources();
       await refreshSelectedSession(selectedSession.id);
     } catch (caught) {
@@ -455,6 +471,7 @@ export function ProjectChatClient({
       return;
     }
     setSourceError(null);
+    setSourceNotice(null);
     try {
       await createFileSources({
         projectId: project.id,
@@ -462,6 +479,7 @@ export function ProjectChatClient({
         sessionId: selectedSession.id,
       });
       setShowAddSourceMenu(false);
+      setSourceNotice("已添加文件资料。");
       await refreshProjectSources();
       await refreshSelectedSession(selectedSession.id);
     } catch (caught) {
@@ -627,6 +645,7 @@ export function ProjectChatClient({
                           onSaveExternalSource={handleSaveExternalSource}
                           onSaveSummary={handleSaveSummary}
                           onToggleSources={toggleSourceList}
+                          savedExternalUris={savedExternalUris}
                           sourceIconFor={sourceIconFor}
                         />
                       ))}
@@ -664,6 +683,7 @@ export function ProjectChatClient({
                   ) : null}
 
                   {sourceError ? <div className={styles.sourceError}>{sourceError}</div> : null}
+                  {sourceNotice ? <div className={styles.sourceNotice}>{sourceNotice}</div> : null}
                   {actionError ? <div className={styles.sourceError}>{actionError}</div> : null}
 
                   <input
@@ -820,6 +840,7 @@ type MessageCardProps = {
   onSaveExternalSource: (url: string) => void;
   onSaveSummary: () => void;
   onDeleteCard: (messageId: string) => void;
+  savedExternalUris: Record<string, boolean>;
   sourceIconFor: (item: { source_type: string; canonical_uri: string }) => string | null;
 };
 
@@ -833,6 +854,7 @@ function MessageCard({
   onSaveExternalSource,
   onSaveSummary,
   onDeleteCard,
+  savedExternalUris,
   sourceIconFor,
 }: MessageCardProps) {
   if (message.message_type === "status_card") {
@@ -864,6 +886,7 @@ function MessageCard({
   }
 
   const isResultCard = message.message_type === "summary_card" || message.message_type === "report_card";
+  const sourceSummary = summarizeSourceKinds(message.sources);
 
   return (
     <article className={`${styles.assistantMessage} ${isResultCard ? styles.resultCard : ""}`.trim()}>
@@ -895,31 +918,40 @@ function MessageCard({
                 );
               })}
             </span>
-            <span>{message.sources.length} 个来源</span>
+            <span>{sourceSummary}</span>
           </button>
 
           {expanded ? (
             <div className={styles.sourceListInline}>
               {message.sources.map((source) =>
                 source.source_kind === "project_source" && source.source_id ? (
-                  <button
-                    key={source.id}
-                    className={styles.sourceTitleButton}
-                    onClick={() => onOpenSource(source.source_id!)}
-                    type="button"
-                  >
-                    {source.source_title}
-                  </button>
+                  <div key={source.id} className={styles.sourceListItem}>
+                    <div className={styles.sourceMetaLine}>
+                      <span className={`${styles.sourceKindTag} ${styles.sourceKindProject}`.trim()}>项目资料</span>
+                      <span className={styles.sourceCanonical}>{source.location_label}</span>
+                    </div>
+                    <button className={styles.sourceTitleButton} onClick={() => onOpenSource(source.source_id!)} type="button">
+                      {source.source_title}
+                    </button>
+                  </div>
                 ) : (
                   <div key={source.id} className={styles.externalSourceCard}>
+                    <div className={styles.sourceMetaLine}>
+                      <span className={`${styles.sourceKindTag} ${styles.sourceKindWeb}`.trim()}>网页补充</span>
+                      <span className={styles.sourceCanonical}>{formatSourceHost(source.canonical_uri)}</span>
+                    </div>
                     <strong>{source.source_title}</strong>
                     <p>{source.excerpt}</p>
                     <div className={styles.externalSourceActions}>
                       <a href={source.canonical_uri} rel="noreferrer" target="_blank">
                         打开网页
                       </a>
-                      <button onClick={() => onSaveExternalSource(source.canonical_uri)} type="button">
-                        保存到知识库
+                      <button
+                        disabled={!!savedExternalUris[source.canonical_uri]}
+                        onClick={() => onSaveExternalSource(source.canonical_uri)}
+                        type="button"
+                      >
+                        {savedExternalUris[source.canonical_uri] ? "已保存到知识库" : "保存到知识库"}
                       </button>
                     </div>
                   </div>
@@ -1013,6 +1045,26 @@ function normalizeSourceError(message: string) {
 function renderPreviewChunkContext(chunk: SourcePreview["preview_chunks"][number]) {
   const parts = [chunk.heading_path, chunk.field_label].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
+}
+
+function summarizeSourceKinds(sources: ChatMessage["sources"]) {
+  const projectCount = sources.filter((source) => source.source_kind === "project_source").length;
+  const webCount = sources.filter((source) => source.source_kind === "external_web").length;
+  if (projectCount && webCount) {
+    return `${sources.length} 个来源 · 项目 ${projectCount} / 网页 ${webCount}`;
+  }
+  if (webCount) {
+    return `${webCount} 个网页来源`;
+  }
+  return `${projectCount || sources.length} 个项目来源`;
+}
+
+function formatSourceHost(uri: string) {
+  try {
+    return new URL(uri).host;
+  } catch {
+    return uri;
+  }
 }
 
 function projectInitials(name: string) {

@@ -527,3 +527,30 @@ Verified
 - Combined V3 eval runner passed:
   - apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all
   - 13 / 13 cases passed
+
+Completed Feature Slice
+- Implemented the V3.1 Phase E UX + final-delivery slice:
+  - project chat source bubbles now distinguish `项目资料` and `网页补充` while staying inside the existing lightweight source layer
+  - external web evidence can now be manually saved to the knowledge base directly from the source list, with stable duplicate-save guarding and success feedback
+  - Playwright mainline now covers:
+    - DOCX import + structured Chinese follow-up in the same session
+    - manual web supplementation + save to knowledge base + same-session follow-up
+- Final delivery fixes completed during the last review pass:
+  - minimal HTML pages now fall back to a lighter extraction path instead of failing ingestion when the body is short but still meaningful
+  - V3 `chat_graph` now preserves the V2 rule that complex grounded turns still trigger rerank without auto-upgrading to deep research
+  - removed the accidental `apps/web/next-env.d.ts` build-side effect from the delivery diff
+
+Verified
+- Backend full regression passed:
+  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend -q
+  - 40 tests passed
+- Combined V3 eval runner passed after final fixes:
+  - apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all
+  - 13 / 13 cases passed
+- Frontend regression passed:
+  - corepack pnpm --dir apps/web test -- --run
+  - 13 tests passed
+  - corepack pnpm --dir apps/web build
+  - corepack pnpm --dir apps/web typecheck
+  - corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts
+  - 7 Playwright tests passed

@@ -249,7 +249,9 @@ class AgentOrchestratorService:
         query = retry_focus or state.get("plan", {}).get("working_query") or state["query"]
         complexity = str(state.get("plan", {}).get("complexity", "simple"))
         limit = 14 if state["research_mode"] else (10 if complexity == "complex" else 8)
-        apply_rerank = True if state["research_mode"] else self.search.should_rerank_query(query)
+        apply_rerank = True if state["research_mode"] else (
+            complexity == "complex" or self.search.should_rerank_query(query)
+        )
         project_hits, diagnostics = self.search.retrieve_project_evidence_with_diagnostics(
             state["project_id"],
             query,

@@ -276,9 +276,12 @@ V3 does not turn the product into a public agent platform:
 ## V3 Verification
 
 ```powershell
-apps/api/.venv/Scripts/python.exe -m pytest tests/backend
-corepack pnpm --dir apps/web typecheck
-corepack pnpm --dir apps/web test
+apps/api/.venv/Scripts/python.exe -m pytest tests/backend -q
+apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all
+corepack pnpm --dir apps/web test -- --run
 corepack pnpm --dir apps/web build
+corepack pnpm --dir apps/web typecheck
 corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts
 ```
+
+`apps/web` 的 `typecheck` 依赖 Next 生成的 `.next/types`，因此应在至少一次 `build` 之后执行。

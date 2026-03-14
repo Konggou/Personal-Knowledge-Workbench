@@ -294,12 +294,12 @@ describe("ProjectChatClient", () => {
     );
     expect(screen.getByText("我用的是哪个手柄？")).toBeInTheDocument();
     expect(screen.getByText("Quest 3 默认配套的是")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /1 个来源/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /来源/ })).not.toBeInTheDocument();
     expect(screen.queryByText("补充说明：部分补充说明来自通用常识，不来自当前项目资料。")).not.toBeInTheDocument();
 
     gate.resolve();
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /1 个来源/ })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /项目来源/ })).toBeInTheDocument());
     expect(screen.getByText("补充说明：部分补充说明来自通用常识，不来自当前项目资料。")).toBeInTheDocument();
   });
 
@@ -506,10 +506,11 @@ describe("ProjectChatClient", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /1 个来源/ }));
+    fireEvent.click(screen.getByRole("button", { name: /项目来源/ }));
     fireEvent.click(screen.getByRole("button", { name: "Quest 3 Notes" }));
 
     await waitFor(() => expect(mocks.getSourcePreview).toHaveBeenCalledWith("source-1"));
+    expect(screen.getByText("项目资料")).toBeInTheDocument();
     expect(await screen.findByText("研究内容 · 课题名称")).toBeInTheDocument();
     expect(screen.getByText("系统需要覆盖空气质量采集。")).toBeInTheDocument();
   });
@@ -555,7 +556,8 @@ describe("ProjectChatClient", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /1 个来源/ }));
+    fireEvent.click(screen.getByRole("button", { name: /网页来源/ }));
+    expect(screen.getByText("网页补充")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "保存到知识库" }));
 
     await waitFor(() =>
@@ -565,5 +567,7 @@ describe("ProjectChatClient", () => {
         }),
       ),
     );
+    expect(await screen.findByText("已保存到知识库，可继续追问新资料。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "已保存到知识库" })).toBeDisabled();
   });
 });
