@@ -50,6 +50,7 @@ export function ProjectChatClient({
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({ [project.id]: true });
   const [message, setMessage] = useState("");
   const [deepResearch, setDeepResearch] = useState(false);
+  const [webBrowsing, setWebBrowsing] = useState(false);
   const [showAddSourceMenu, setShowAddSourceMenu] = useState(false);
   const [showWebForm, setShowWebForm] = useState(false);
   const [webUrl, setWebUrl] = useState("");
@@ -222,6 +223,7 @@ export function ProjectChatClient({
     const sessionId = selectedSession.id;
     const content = message.trim();
     const useDeepResearch = deepResearch;
+    const useWebBrowsing = webBrowsing && project.default_external_policy === "allow_external";
     const tempUserMessage = createTemporaryMessage({
       id: `temp-user-${Date.now()}`,
       sessionId,
@@ -253,6 +255,7 @@ export function ProjectChatClient({
     );
     setMessage("");
     setDeepResearch(false);
+    setWebBrowsing(false);
     setIsStreamingMessage(true);
     setActionError(null);
     let streamFailed = false;
@@ -263,6 +266,7 @@ export function ProjectChatClient({
           sessionId,
           content,
           deepResearch: useDeepResearch,
+          webBrowsing: useWebBrowsing,
         },
         {
           onEvent: (event) => {
@@ -400,6 +404,24 @@ export function ProjectChatClient({
     }
     const next = await deleteMessageCard(messageId);
     setSelectedSession(next);
+  }
+
+  async function handleSaveExternalSource(url: string) {
+    if (!selectedSession) {
+      return;
+    }
+    setSourceError(null);
+    try {
+      await createWebSource({
+        projectId: project.id,
+        url,
+        sessionId: selectedSession.id,
+      });
+      await refreshProjectSources();
+      await refreshSelectedSession(selectedSession.id);
+    } catch (caught) {
+      setSourceError(caught instanceof Error ? normalizeSourceError(caught.message) : "保存网页资料失败，请稍后重试。");
+    }
   }
 
   async function handleWebSourceCreate() {
@@ -602,6 +624,7 @@ export function ProjectChatClient({
                           message={item}
                           onDeleteCard={handleDeleteCard}
                           onOpenSource={openSourcePreview}
+                          onSaveExternalSource={handleSaveExternalSource}
                           onSaveSummary={handleSaveSummary}
                           onToggleSources={toggleSourceList}
                           sourceIconFor={sourceIconFor}
@@ -698,6 +721,21 @@ export function ProjectChatClient({
                       </button>
 
                       <button
+                        aria-pressed={webBrowsing}
+                        className={`${styles.lightAction} ${webBrowsing ? styles.lightActionActive : ""}`.trim()}
+                        disabled={project.default_external_policy !== "allow_external"}
+                        onClick={() => setWebBrowsing((value) => !value)}
+                        title={
+                          project.default_external_policy === "allow_external"
+                            ? "为本轮问题联网补充网页资料"
+                            : "当前项目未开启联网补充"
+                        }
+                        type="button"
+                      >
+                        联网补充
+                      </button>
+
+                      <button
                         className={styles.lightAction}
                         disabled={!latestActionableMessage || isStreamingMessage}
                         onClick={() => void handleGenerateReport()}
@@ -717,7 +755,11 @@ export function ProjectChatClient({
 
                     <div className={styles.composerBottom}>
                       <span className={styles.composerHint}>
-                        {deepResearch ? "本次发送将走深度调研模式，发送后自动恢复普通提问。" : "直接提问即可；需要更完整分析时可手动开启深度调研。"}
+                        {deepResearch
+                          ? "本次发送将走深度调研模式，发送后自动恢复普通提问。"
+                          : webBrowsing
+                            ? "本次发送会优先查项目资料，并在需要时联网补充网页信息。"
+                            : "直接提问即可；需要更完整分析时可手动开启深度调研。"}
                       </span>
                       <button className={styles.sendButton} disabled={!message.trim() || isPending || isStreamingMessage} onClick={() => void handleSendMessage()} type="button">
                         发送
@@ -775,6 +817,7 @@ type MessageCardProps = {
   expanded: boolean;
   onToggleSources: (messageId: string) => void;
   onOpenSource: (sourceId: string) => void;
+  onSaveExternalSource: (url: string) => void;
   onSaveSummary: () => void;
   onDeleteCard: (messageId: string) => void;
   sourceIconFor: (item: { source_type: string; canonical_uri: string }) => string | null;
@@ -787,6 +830,7 @@ function MessageCard({
   expanded,
   onToggleSources,
   onOpenSource,
+  onSaveExternalSource,
   onSaveSummary,
   onDeleteCard,
   sourceIconFor,
@@ -856,11 +900,31 @@ function MessageCard({
 
           {expanded ? (
             <div className={styles.sourceListInline}>
-              {message.sources.map((source) => (
-                <button key={source.id} className={styles.sourceTitleButton} onClick={() => onOpenSource(source.source_id)} type="button">
-                  {source.source_title}
-                </button>
-              ))}
+              {message.sources.map((source) =>
+                source.source_kind === "project_source" && source.source_id ? (
+                  <button
+                    key={source.id}
+                    className={styles.sourceTitleButton}
+                    onClick={() => onOpenSource(source.source_id!)}
+                    type="button"
+                  >
+                    {source.source_title}
+                  </button>
+                ) : (
+                  <div key={source.id} className={styles.externalSourceCard}>
+                    <strong>{source.source_title}</strong>
+                    <p>{source.excerpt}</p>
+                    <div className={styles.externalSourceActions}>
+                      <a href={source.canonical_uri} rel="noreferrer" target="_blank">
+                        打开网页
+                      </a>
+                      <button onClick={() => onSaveExternalSource(source.canonical_uri)} type="button">
+                        保存到知识库
+                      </button>
+                    </div>
+                  </div>
+                ),
+              )}
             </div>
           ) : null}
         </>

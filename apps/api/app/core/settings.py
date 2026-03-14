@@ -54,6 +54,9 @@ class Settings(BaseModel):
     llm_base_url: str = _setting("WORKBENCH_LLM_BASE_URL", "https://api.deepseek.com")
     llm_model: str = _setting("WORKBENCH_LLM_MODEL", "deepseek-chat")
     llm_timeout_seconds: float = float(_setting("WORKBENCH_LLM_TIMEOUT_SECONDS", "45"))
+    agent_runtime_version: str = _setting("WORKBENCH_AGENT_RUNTIME_VERSION", "v3")
+    agent_web_result_limit: int = int(_setting("WORKBENCH_AGENT_WEB_RESULT_LIMIT", "3"))
+    agent_web_fetch_limit: int = int(_setting("WORKBENCH_AGENT_WEB_FETCH_LIMIT", "2"))
 
 
 def get_settings() -> Settings:

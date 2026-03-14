@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AnchorHTMLAttributes } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChatMessage, KnowledgeSource, ProjectSummary, SessionDetail, SessionGroup, SessionSummary } from "@/lib/api";
 
@@ -158,11 +158,13 @@ function createAssistantMessage(): ChatMessage {
       {
         id: "message-source-1",
         source_id: "source-1",
+        source_kind: "project_source",
         chunk_id: null,
         source_rank: 1,
         source_type: "web_page",
         source_title: "Quest 3 Notes",
         canonical_uri: "https://example.com/quest-3",
+        external_uri: null,
         location_label: "Projects #1",
         excerpt: "Quest 3 ships with Touch Plus controllers by default.",
         relevance_score: 4.2,
@@ -236,6 +238,10 @@ function deferredValue<T>() {
   return { promise, resolve };
 }
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 describe("ProjectChatClient", () => {
   it("streams grounded content into the placeholder and only mounts sources on done", async () => {
     const gate = deferred();
@@ -250,7 +256,7 @@ describe("ProjectChatClient", () => {
       messages: [createUserMessage("我用的是哪个手柄？"), finalAssistant],
     };
 
-    mocks.streamSessionMessage.mockImplementationOnce(async (_input, handlers) => {
+    mocks.streamSessionMessage.mockImplementationOnce(async (_input: unknown, handlers: { onEvent: (event: any) => void }) => {
       handlers.onEvent({
         event: "delta",
         data: { delta: "Quest 3 默认配套的是 " },
@@ -273,23 +279,71 @@ describe("ProjectChatClient", () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("继续在这个项目里提问……"), {
+    fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "我用的是哪个手柄？" },
     });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
 
     await waitFor(() => expect(mocks.streamSessionMessage).toHaveBeenCalled());
+    expect(mocks.streamSessionMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deepResearch: false,
+        webBrowsing: false,
+      }),
+      expect.any(Object),
+    );
     expect(screen.getByText("我用的是哪个手柄？")).toBeInTheDocument();
     expect(screen.getByText("Quest 3 默认配套的是")).toBeInTheDocument();
-    expect(screen.queryByText("通用对话")).not.toBeInTheDocument();
-    expect(screen.queryByText("1 个来源")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /1 个来源/ })).not.toBeInTheDocument();
     expect(screen.queryByText("补充说明：部分补充说明来自通用常识，不来自当前项目资料。")).not.toBeInTheDocument();
 
     gate.resolve();
 
-    await waitFor(() => expect(screen.getByText("1 个来源")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /1 个来源/ })).toBeInTheDocument());
     expect(screen.getByText("补充说明：部分补充说明来自通用常识，不来自当前项目资料。")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "基于当前资料的回答" })).not.toBeInTheDocument();
+  });
+
+  it("sends the web browsing flag when the toggle is enabled", async () => {
+    const project = createProject();
+    const session = createInitialSessionDetail();
+    const finalAssistant = createAssistantMessage();
+    const refreshedSession = {
+      ...session,
+      title_source: "auto" as const,
+      message_count: 2,
+      latest_message_at: "2026-03-13T00:01:00.000Z",
+      messages: [createUserMessage("请联网补充一下"), finalAssistant],
+    };
+
+    mocks.streamSessionMessage.mockImplementationOnce(async (_input: unknown, handlers: { onEvent: (event: any) => void }) => {
+      handlers.onEvent({ event: "done", data: { message: finalAssistant } });
+    });
+    mocks.getSession.mockResolvedValueOnce(refreshedSession);
+
+    render(
+      <ProjectChatClient
+        allProjects={[project]}
+        initialSelectedSession={session}
+        initialSessionGroups={createSessionGroups()}
+        initialSources={[createKnowledgeSource()]}
+        project={project}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "联网补充" }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "请联网补充一下" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    await waitFor(() => expect(mocks.streamSessionMessage).toHaveBeenCalled());
+    expect(mocks.streamSessionMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deepResearch: false,
+        webBrowsing: true,
+      }),
+      expect.any(Object),
+    );
   });
 
   it("renders a summary card after saving the latest actionable answer", async () => {
@@ -335,7 +389,7 @@ describe("ProjectChatClient", () => {
       messages: [createUserMessage("我用的是哪个手柄？"), finalAssistant],
     };
 
-    mocks.streamSessionMessage.mockImplementationOnce(async (_input, handlers) => {
+    mocks.streamSessionMessage.mockImplementationOnce(async (_input: unknown, handlers: { onEvent: (event: any) => void }) => {
       handlers.onEvent({
         event: "delta",
         data: { delta: "Quest 3 默认配套的是 " },
@@ -358,7 +412,7 @@ describe("ProjectChatClient", () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText("继续在这个项目里提问……"), {
+    fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "我用的是哪个手柄？" },
     });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
@@ -385,10 +439,10 @@ describe("ProjectChatClient", () => {
       {
         ...createKnowledgeSource(),
         id: "source-2",
-        title: "开题报告-刘艺.docx",
+        title: "开题报告.docx",
         source_type: "file_docx" as const,
         canonical_uri: "file:///outline.docx",
-        original_filename: "开题报告-刘艺.docx",
+        original_filename: "开题报告.docx",
       },
     ];
 
@@ -411,13 +465,13 @@ describe("ProjectChatClient", () => {
 
     fireEvent.change(fileInput!, {
       target: {
-        files: [new File(["dummy"], "开题报告-刘艺.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })],
+        files: [new File(["dummy"], "开题报告.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })],
       },
     });
 
     await waitFor(() => expect(mocks.createFileSources).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByText("2 份资料 · 1 个会话")).toBeInTheDocument());
-    expect(screen.getByText("知识库 · 2 份资料")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("link", { name: /知识库 · 2 份资料/ })).toBeInTheDocument());
+    expect(screen.getByText(/2 份资料 · 1 个会话/)).toBeInTheDocument();
   });
 
   it("renders structured preview context when opening a source from the source bubble", async () => {
@@ -452,11 +506,64 @@ describe("ProjectChatClient", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "1 个来源" }));
+    fireEvent.click(screen.getByRole("button", { name: /1 个来源/ }));
     fireEvent.click(screen.getByRole("button", { name: "Quest 3 Notes" }));
 
     await waitFor(() => expect(mocks.getSourcePreview).toHaveBeenCalledWith("source-1"));
     expect(await screen.findByText("研究内容 · 课题名称")).toBeInTheDocument();
     expect(screen.getByText("系统需要覆盖空气质量采集。")).toBeInTheDocument();
+  });
+
+  it("allows saving an external web source from the source bubble", async () => {
+    const project = createProject();
+    const externalAnswer: ChatMessage = {
+      ...createAssistantMessage(),
+      id: "assistant-external",
+      sources: [
+        {
+          id: "message-source-external",
+          source_id: null,
+          source_kind: "external_web",
+          chunk_id: null,
+          source_rank: 1,
+          source_type: "web_page",
+          source_title: "External Research Note",
+          canonical_uri: "https://example.com/external-note",
+          external_uri: "https://example.com/external-note",
+          location_label: "网页补充 #1",
+          excerpt: "External benchmark notes from the web.",
+          relevance_score: 3.8,
+        },
+      ],
+    };
+    const session: SessionDetail = {
+      ...createSessionSummary(),
+      message_count: 2,
+      messages: [createUserMessage("请联网补充说明"), externalAnswer],
+    };
+    mocks.createWebSource.mockResolvedValueOnce(createKnowledgeSource());
+    mocks.listProjectSources.mockResolvedValueOnce([createKnowledgeSource()]);
+    mocks.getSession.mockResolvedValueOnce(session);
+
+    render(
+      <ProjectChatClient
+        allProjects={[project]}
+        initialSelectedSession={session}
+        initialSessionGroups={createSessionGroups()}
+        initialSources={[createKnowledgeSource()]}
+        project={project}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /1 个来源/ }));
+    fireEvent.click(screen.getByRole("button", { name: "保存到知识库" }));
+
+    await waitFor(() =>
+      expect(mocks.createWebSource).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "https://example.com/external-note",
+        }),
+      ),
+    );
   });
 });

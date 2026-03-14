@@ -173,12 +173,16 @@ CREATE TABLE IF NOT EXISTS message_sources (
   message_id TEXT NOT NULL,
   session_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
-  source_id TEXT NOT NULL,
+  source_id TEXT NULL,
+  source_kind TEXT NOT NULL DEFAULT 'project_source' CHECK (
+    source_kind IN ('project_source', 'external_web')
+  ),
   chunk_id TEXT NULL,
   source_rank INTEGER NOT NULL,
   source_type TEXT NOT NULL,
   source_title TEXT NOT NULL,
   canonical_uri TEXT NOT NULL,
+  external_uri TEXT NULL,
   location_label TEXT NOT NULL,
   excerpt TEXT NOT NULL,
   relevance_score REAL NOT NULL,
@@ -188,4 +192,21 @@ CREATE TABLE IF NOT EXISTS message_sources (
   FOREIGN KEY (project_id) REFERENCES projects(id),
   FOREIGN KEY (source_id) REFERENCES sources(id),
   FOREIGN KEY (chunk_id) REFERENCES source_chunks(id)
+);
+
+CREATE TABLE IF NOT EXISTS memory_entries (
+  id TEXT PRIMARY KEY,
+  scope_type TEXT NOT NULL CHECK (
+    scope_type IN ('session', 'project')
+  ),
+  scope_id TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  fact_text TEXT NOT NULL,
+  salience REAL NOT NULL,
+  source_message_id TEXT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_used_at TEXT NULL,
+  UNIQUE(scope_type, scope_id, topic, fact_text),
+  FOREIGN KEY (source_message_id) REFERENCES session_messages(id)
 );

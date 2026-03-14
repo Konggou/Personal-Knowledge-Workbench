@@ -34,12 +34,14 @@ export type SessionSummary = {
 
 export type MessageSource = {
   id: string;
-  source_id: string;
+  source_id: string | null;
+  source_kind: "project_source" | "external_web";
   chunk_id: string | null;
   source_rank: number;
   source_type: "web_page" | "file_pdf" | "file_docx";
   source_title: string;
   canonical_uri: string;
+  external_uri: string | null;
   location_label: string;
   excerpt: string;
   relevance_score: number;
@@ -227,6 +229,7 @@ export async function sendSessionMessage(input: {
   sessionId: string;
   content: string;
   deepResearch: boolean;
+  webBrowsing: boolean;
 }): Promise<SessionDetail> {
   const response = await fetch(`${apiBaseUrl}/api/v1/sessions/${input.sessionId}/messages`, {
     method: "POST",
@@ -234,6 +237,7 @@ export async function sendSessionMessage(input: {
     body: JSON.stringify({
       content: input.content,
       deep_research: input.deepResearch,
+      web_browsing: input.webBrowsing,
     }),
   });
   const payload = await readJson<{ item: SessionDetail }>(response);
@@ -245,6 +249,7 @@ export async function streamSessionMessage(
     sessionId: string;
     content: string;
     deepResearch: boolean;
+    webBrowsing: boolean;
   },
   handlers: {
     onEvent: (event: StreamedMessageEvent) => void;
@@ -256,6 +261,7 @@ export async function streamSessionMessage(
     body: JSON.stringify({
       content: input.content,
       deep_research: input.deepResearch,
+      web_browsing: input.webBrowsing,
     }),
   });
 

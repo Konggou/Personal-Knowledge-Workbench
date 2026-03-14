@@ -318,6 +318,64 @@ Qdrant 是默认向量索引层。
   - Self-RAG
   - RL-enhanced RAG
   - full multimodal RAG
+
+## 10. V3 Agentic Runtime
+
+### 10.1 Runtime Switch
+
+- Session send flow now supports two internal runtimes:
+  - `v3` default graph runtime
+  - `v2` legacy fallback runtime
+- Runtime selection is controlled by `WORKBENCH_AGENT_RUNTIME_VERSION`.
+
+### 10.2 Internal Orchestration
+
+- `AgentOrchestratorService` is the internal graph entry for all message turns.
+- The graph remains bounded and chat-first:
+  - `chat_graph`
+    - `load_turn_context -> load_memory -> classify_turn -> project_retrieval -> optional_web_branch -> evidence_selection -> pre_answer_check`
+  - `research_graph`
+    - `load_turn_context -> load_memory -> plan_turn -> project_retrieval -> optional_web_branch -> fuse_evidence -> pre_answer_check`
+- The graph never becomes a public “agent platform” surface.
+
+### 10.3 Tools / Subsystems
+
+- `project_search`
+  - still powered by the existing structured retrieval stack
+- `memory_lookup`
+  - session and project scoped memory retrieval
+- `memory_write`
+  - only after successful assistant answers
+- `web_search` / `web_fetch`
+  - only enabled when the user explicitly turns on `web_browsing`
+- `read_source_context`
+  - internal helper for source preview style context reads
+
+### 10.4 Persistence Additions
+
+- New table: `memory_entries`
+  - `scope_type`
+  - `scope_id`
+  - `topic`
+  - `fact_text`
+  - `salience`
+  - `source_message_id`
+- `message_sources` now supports mixed evidence kinds:
+  - `source_kind = project_source | external_web`
+  - `source_id` can be null for external web evidence
+  - `external_uri` stores the original web page URL for external evidence
+
+### 10.5 Public Contract Changes
+
+- Public API family is unchanged.
+- Message creation payload now accepts:
+  - `deep_research: boolean`
+  - `web_browsing: boolean`
+- Public frontend language is unchanged; the backend-only concepts below remain hidden:
+  - LangGraph
+  - tool calls
+  - memory internals
+  - readiness checker
 ## 10. V2.2 Structured Chunking Notes
 
 - `source_chunks` now carries structured retrieval metadata:

@@ -45,12 +45,24 @@ def delete_session(session_id: str):
 
 @router.post("/sessions/{session_id}/messages")
 def send_message(session_id: str, payload: SessionMessageCreateRequest) -> dict:
-    return {"item": service.send_message(session_id=session_id, content=payload.content, deep_research=payload.deep_research)}
+    return {
+        "item": service.send_message(
+            session_id=session_id,
+            content=payload.content,
+            deep_research=payload.deep_research,
+            web_browsing=payload.web_browsing,
+        )
+    }
 
 
 @router.post("/sessions/{session_id}/messages/stream")
 def stream_message(session_id: str, payload: SessionMessageCreateRequest):
-    return service.stream_send_message(session_id=session_id, content=payload.content, deep_research=payload.deep_research)
+    return service.stream_send_message(
+        session_id=session_id,
+        content=payload.content,
+        deep_research=payload.deep_research,
+        web_browsing=payload.web_browsing,
+    )
 
 
 @router.post("/sessions/{session_id}/summary")

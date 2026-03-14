@@ -258,6 +258,51 @@ Next
 - Real usage pass by the user
 - If needed, improve:
   - semantic/structured chunking
+  - agentic runtime quality and bounded graph heuristics
+
+V3 Update
+Last Updated: 2026-03-14
+
+Completed
+- Added a V3 chat-first agentic runtime behind the existing session/message product model
+- Added internal LangGraph orchestration with bounded chat and research graphs
+- Kept the public route and API families unchanged
+- Added optional `web_browsing` support to message send and stream APIs
+- Added manual `联网补充` composer toggle in project chat
+- Added external web evidence rendering and “save to knowledge” support in the source layer
+- Added session/project memory persistence through `memory_entries`
+- Extended `message_sources` to support:
+  - `source_kind`
+  - nullable `source_id`
+  - `external_uri`
+- Added runtime fallback switch:
+  - `WORKBENCH_AGENT_RUNTIME_VERSION=v3` default
+  - `WORKBENCH_AGENT_RUNTIME_VERSION=v2` legacy fallback
+- Added backend V3 regression coverage for:
+  - web branch disabled behavior
+  - external web evidence path
+  - memory persistence
+  - V2 fallback path
+- Expanded frontend regression coverage for:
+  - `联网补充` toggle
+  - external web source bubble rendering
+  - structured source preview metadata
+- Refreshed Playwright mainline coverage with stable V3-compatible assertions
+
+Verified
+- Backend pytest passed:
+  - `apps/api/.venv/Scripts/python.exe -m pytest tests/backend`
+  - 33 tests passed
+- Frontend typecheck passed:
+  - `corepack pnpm --dir apps/web exec tsc --noEmit`
+- Frontend vitest passed:
+  - `corepack pnpm --dir apps/web test`
+  - 13 tests passed
+- Frontend build passed:
+  - `corepack pnpm --dir apps/web build`
+- Playwright mainline passed:
+  - `corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts`
+  - 6 tests passed
   - better rerank
   - richer source preview
   - tighter in-session streaming experience

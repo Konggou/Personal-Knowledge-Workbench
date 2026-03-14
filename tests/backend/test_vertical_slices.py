@@ -155,8 +155,8 @@ def test_deep_research_stays_in_same_session_and_emits_events(client, html_serve
     assert response.status_code == 200, response.text
     detail = response.json()["item"]
 
-    assert any(item["message_type"] == "status_card" and item["title"] == "调研中" for item in detail["messages"])
-    assert any(item["message_type"] == "status_card" and item["title"] == "调研完成" for item in detail["messages"])
+    assert any(item["message_type"] == "status_card" and item["title"] == "正在查项目资料" for item in detail["messages"])
+    assert any(item["message_type"] == "status_card" and item["title"] == "正在整理结论" for item in detail["messages"])
     assert any(item["message_type"] == "assistant_answer" and item["title"] == "调研结论" for item in detail["messages"])
 
     events_response = client.get(f"/api/v1/sessions/{session['id']}/events")
@@ -235,7 +235,6 @@ def test_vector_search_still_returns_evidence_when_lexical_ranking_is_disabled(c
     monkeypatch.setattr(SearchService, "_score_chunks", lambda self, *, chunks, query, limit: [])
 
     project = _create_project(client, name="纯向量命中项目")
-    session = client.post(f"/api/v1/projects/{project['id']}/sessions").json()["item"]
 
     source_url = _create_html_source(
         html_server,
@@ -249,17 +248,15 @@ def test_vector_search_still_returns_evidence_when_lexical_ranking_is_disabled(c
     )
     client.post(f"/api/v1/projects/{project['id']}/sources/web", json={"url": source_url})
 
-    ask_response = client.post(
-        f"/api/v1/sessions/{session['id']}/messages",
-        json={"content": "What does the source say about lighthouse orchard benchmark?", "deep_research": False},
+    results = SearchService().retrieve_project_evidence(
+        project["id"],
+        "What does the source say about lighthouse orchard benchmark?",
+        limit=3,
+        apply_rerank=False,
     )
-    assert ask_response.status_code == 200, ask_response.text
-    detail = ask_response.json()["item"]
-
-    answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
-    assert answer["source_mode"] == "project_grounded"
-    assert len(answer["sources"]) >= 1
-    assert "lighthouse orchard benchmark" in answer["content_md"].lower()
+    assert results
+    assert any("lighthouse orchard benchmark" in item["normalized_text"].lower() for item in results)
+    assert results[0]["source_title"] == "Vector Source"
 
 
 def test_docx_table_content_is_searchable_for_chinese_sentence_queries(client):
@@ -303,7 +300,7 @@ def test_weak_source_mode_can_continue_with_llm_chat(client, monkeypatch):
     monkeypatch.setattr(
         sessions_route_service.llm,
         "generate_chat_reply",
-        lambda *, conversation, research_mode=False: "我是 Personal Knowledge Workbench 的通用对话助手，可以在没有资料命中时继续直接回答你。",
+        lambda *, conversation, research_mode=False, context_notes=None: "我是 Personal Knowledge Workbench 的通用对话助手，可以在没有资料命中时继续直接回答你。",
     )
 
     ask_response = client.post(

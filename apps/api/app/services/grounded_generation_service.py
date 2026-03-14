@@ -52,38 +52,11 @@ class GroundedGenerationService:
             apply_rerank=apply_rerank,
             history=history,
         )
-        if not self._should_accept_grounded_candidate(query=query, evidences=retrieved, diagnostics=diagnostics):
-            empty_selection = {
-                "input_candidate_count": len(retrieved),
-                "selected_candidate_count": 0,
-                "selector_applied": False,
-                "rejection_reason": "low_confidence_delivery_candidate",
-                "items": [],
-            }
-            empty_compression = {
-                "input_evidence_count": 0,
-                "compressed_evidence_count": 0,
-                "items": [],
-            }
-            augmented_diagnostics = self._augment_retrieval_diagnostics(
-                diagnostics=diagnostics,
-                selected=[],
-                selection_diagnostics=empty_selection,
-                compression_diagnostics=empty_compression,
-            )
-            self._last_retrieval_diagnostics.set(augmented_diagnostics)
-            return []
-        selected, selection_diagnostics = self._select_evidence_candidates(
+        packed, augmented_diagnostics = self.prepare_agent_evidence(
             query=query,
-            evidences=retrieved,
-            limit=final_limit,
-        )
-        packed, compression_diagnostics = self._build_evidence_pack(query=query, evidences=selected)
-        augmented_diagnostics = self._augment_retrieval_diagnostics(
-            diagnostics=diagnostics,
-            selected=selected,
-            selection_diagnostics=selection_diagnostics,
-            compression_diagnostics=compression_diagnostics,
+            project_hits=retrieved,
+            project_diagnostics=diagnostics,
+            research_mode=research_mode,
         )
         self._last_retrieval_diagnostics.set(augmented_diagnostics)
         return packed
@@ -99,12 +72,14 @@ class GroundedGenerationService:
         query: str,
         evidences: list[dict],
         research_mode: bool,
+        context_notes: list[str] | None = None,
     ) -> dict:
         try:
             grounded = self.llm.generate_grounded_reply(
                 conversation=history,
                 evidence_pack=evidences,
                 research_mode=research_mode,
+                context_notes=context_notes,
             )
         except RuntimeError:
             grounded = self._build_grounded_failure_answer(query=query, evidences=evidences)
@@ -117,6 +92,7 @@ class GroundedGenerationService:
         query: str,
         evidences: list[dict],
         research_mode: bool,
+        context_notes: list[str] | None = None,
     ) -> Iterator[str]:
         streamed_chunks: list[str] = []
         try:
@@ -124,6 +100,7 @@ class GroundedGenerationService:
                 conversation=history,
                 evidence_pack=evidences,
                 research_mode=research_mode,
+                context_notes=context_notes,
             )
             while True:
                 try:
@@ -150,6 +127,84 @@ class GroundedGenerationService:
                 for chunk in self._chunk_text(grounded["answer_md"]):
                     yield chunk
         return self._build_answer_payload(grounded=grounded, research_mode=research_mode)
+
+    def prepare_agent_evidence(
+        self,
+        *,
+        query: str,
+        project_hits: list[dict],
+        project_diagnostics: dict,
+        research_mode: bool,
+        external_hits: list[dict] | None = None,
+    ) -> tuple[list[dict], dict]:
+        final_limit = RESEARCH_GROUNDED_EVIDENCE_LIMIT if research_mode else NORMAL_GROUNDED_EVIDENCE_LIMIT
+        accepted_project_hits = project_hits
+        selection_diagnostics: dict
+        compression_diagnostics: dict
+
+        if project_hits and not self._should_accept_grounded_candidate(
+            query=query,
+            evidences=project_hits,
+            diagnostics=project_diagnostics,
+        ):
+            accepted_project_hits = []
+            selection_diagnostics = {
+                "input_candidate_count": len(project_hits),
+                "selected_candidate_count": 0,
+                "selector_applied": False,
+                "rejection_reason": "low_confidence_delivery_candidate",
+                "items": [],
+            }
+            compression_diagnostics = {
+                "input_evidence_count": 0,
+                "compressed_evidence_count": 0,
+                "items": [],
+            }
+        else:
+            selection_diagnostics = {}
+            compression_diagnostics = {}
+
+        candidate_pool = [*accepted_project_hits, *(external_hits or [])]
+        if not candidate_pool:
+            if not selection_diagnostics:
+                selection_diagnostics = {
+                    "input_candidate_count": 0,
+                    "selected_candidate_count": 0,
+                    "selector_applied": False,
+                    "items": [],
+                }
+            if not compression_diagnostics:
+                compression_diagnostics = {
+                    "input_evidence_count": 0,
+                    "compressed_evidence_count": 0,
+                    "items": [],
+                }
+            return (
+                [],
+                self._augment_retrieval_diagnostics(
+                    diagnostics=project_diagnostics,
+                    selected=[],
+                    selection_diagnostics=selection_diagnostics,
+                    compression_diagnostics=compression_diagnostics,
+                ),
+            )
+
+        selected, selection_diagnostics = self._select_evidence_candidates(
+            query=query,
+            evidences=candidate_pool,
+            limit=final_limit,
+        )
+        packed, compression_diagnostics = self._build_evidence_pack(query=query, evidences=selected)
+        augmented = self._augment_retrieval_diagnostics(
+            diagnostics=project_diagnostics,
+            selected=selected,
+            selection_diagnostics=selection_diagnostics,
+            compression_diagnostics=compression_diagnostics,
+        )
+        augmented["final"]["external_source_count"] = len(
+            {item["canonical_uri"] for item in selected if item.get("source_kind") == "external_web"}
+        )
+        return packed, augmented
 
     def _build_evidence_pack(self, *, query: str, evidences: list[dict]) -> tuple[list[dict], dict]:
         packed: list[dict] = []
@@ -195,7 +250,12 @@ class GroundedGenerationService:
         final.update(
             {
                 "selected_evidence_count": len(selected),
-                "source_count": len({item["source_id"] for item in selected}),
+                "source_count": len(
+                    {
+                        item["source_id"] if item.get("source_kind") != "external_web" else item.get("canonical_uri")
+                        for item in selected
+                    }
+                ),
                 "returned_hit_count": len(selected),
             }
         )
@@ -301,10 +361,34 @@ class GroundedGenerationService:
         field_or_proposition_hits = any(
             str(item.get("section_type") or "body") in {"field", "proposition"} for item in evidences[:5]
         )
+        evidence_haystack = " ".join(
+            " ".join(
+                str(value or "")
+                for value in (
+                    item.get("source_title"),
+                    item.get("heading_path"),
+                    item.get("field_label"),
+                    item.get("normalized_text"),
+                    item.get("excerpt"),
+                )
+            ).lower()
+            for item in evidences[:5]
+        )
+        query_terms = [term for term in self.search.repository.build_query_terms(query) if len(term) >= 4]
+        matched_terms = {term for term in query_terms if term in evidence_haystack}
+        strong_semantic_overlap = (
+            term_coverage_ratio >= 0.45
+            and top_score >= 0.5
+            and len(matched_terms) >= min(3, max(2, len(query_terms) // 2 or 2))
+        )
 
         if top_score < MIN_ACCEPTED_TOP_SCORE:
+            if strong_semantic_overlap:
+                return True
             return False
         if diagnostics.get("triggered_second_pass") and top_score < MIN_ACCEPTED_SECOND_PASS_TOP_SCORE and not field_or_proposition_hits:
+            if strong_semantic_overlap:
+                return True
             return False
         if term_coverage_ratio == 0 and top_score < (MIN_ACCEPTED_TOP_SCORE + 0.4) and not field_or_proposition_hits:
             return False
@@ -323,6 +407,8 @@ class GroundedGenerationService:
         excerpt = str(item.get("excerpt") or "").lower()
 
         score = float(item.get("relevance_score", 0.0))
+        if item.get("source_kind") != "external_web":
+            score += 0.35
         score += 0.45 * sum(1 for term in terms if term in normalized_text)
         score += 0.2 * sum(1 for term in terms if term in excerpt)
 

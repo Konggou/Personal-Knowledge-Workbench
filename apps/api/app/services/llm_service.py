@@ -9,7 +9,7 @@ import httpx
 from app.core.settings import get_settings
 
 
-GROUNDING_DISCLOSURE_NOTE = "补充说明：部分补充说明来自通用常识，不来自当前项目资料。"
+GROUNDING_DISCLOSURE_NOTE = "补充说明：部分补充解释来自通用常识，不来自当前项目资料。"
 
 
 class GroundedJsonStreamParser:
@@ -94,20 +94,40 @@ class LLMService:
         settings = get_settings()
         return bool(settings.llm_api_key and settings.llm_model and settings.llm_base_url)
 
-    def generate_chat_reply(self, *, conversation: list[dict], research_mode: bool = False) -> str:
+    def generate_chat_reply(
+        self,
+        *,
+        conversation: list[dict],
+        research_mode: bool = False,
+        context_notes: list[str] | None = None,
+    ) -> str:
         if not self.is_configured():
             raise RuntimeError("LLM is not configured.")
-        messages = self._build_chat_messages(conversation=conversation, research_mode=research_mode)
+        messages = self._build_chat_messages(
+            conversation=conversation,
+            research_mode=research_mode,
+            context_notes=context_notes,
+        )
         text = self._complete_messages(messages=messages, temperature=0.7)
         text = self._sanitize_output(text)
         if not text:
             raise RuntimeError("LLM returned an empty response.")
         return text
 
-    def stream_chat_reply(self, *, conversation: list[dict], research_mode: bool = False) -> Iterator[str]:
+    def stream_chat_reply(
+        self,
+        *,
+        conversation: list[dict],
+        research_mode: bool = False,
+        context_notes: list[str] | None = None,
+    ) -> Iterator[str]:
         if not self.is_configured():
             raise RuntimeError("LLM is not configured.")
-        messages = self._build_chat_messages(conversation=conversation, research_mode=research_mode)
+        messages = self._build_chat_messages(
+            conversation=conversation,
+            research_mode=research_mode,
+            context_notes=context_notes,
+        )
         raw_text = ""
         cleaned_text = ""
         for chunk in self._stream_completion(messages=messages, temperature=0.7):
@@ -128,6 +148,7 @@ class LLMService:
         conversation: list[dict],
         evidence_pack: list[dict],
         research_mode: bool = False,
+        context_notes: list[str] | None = None,
     ) -> dict:
         if not self.is_configured():
             raise RuntimeError("LLM is not configured.")
@@ -135,6 +156,7 @@ class LLMService:
             conversation=conversation,
             evidence_pack=evidence_pack,
             research_mode=research_mode,
+            context_notes=context_notes,
         )
         raw_text = self._complete_messages(messages=messages, temperature=0.2)
         return self.parse_grounded_reply(raw_text)
@@ -155,6 +177,7 @@ class LLMService:
         conversation: list[dict],
         evidence_pack: list[dict],
         research_mode: bool = False,
+        context_notes: list[str] | None = None,
     ) -> Iterator[str]:
         if not self.is_configured():
             raise RuntimeError("LLM is not configured.")
@@ -162,6 +185,7 @@ class LLMService:
             conversation=conversation,
             evidence_pack=evidence_pack,
             research_mode=research_mode,
+            context_notes=context_notes,
         )
         parser = GroundedJsonStreamParser(sanitizer=self._sanitize_output)
         for chunk in self._stream_completion(messages=messages, temperature=0.2):
@@ -172,6 +196,95 @@ class LLMService:
         if len(parsed["answer_md"]) > len(parser.answer_md):
             yield parsed["answer_md"][len(parser.answer_md) :]
         return parsed
+
+    def plan_agent_turn(
+        self,
+        *,
+        query: str,
+        memory_notes: list[str],
+        research_mode: bool,
+        web_browsing: bool,
+    ) -> dict:
+        if not self.is_configured():
+            return self._heuristic_plan_agent_turn(
+                query=query,
+                memory_notes=memory_notes,
+                research_mode=research_mode,
+                web_browsing=web_browsing,
+            )
+        messages = self._build_agent_planner_messages(
+            query=query,
+            memory_notes=memory_notes,
+            research_mode=research_mode,
+            web_browsing=web_browsing,
+        )
+        try:
+            raw_text = self._complete_messages(messages=messages, temperature=0.2)
+            payload = json.loads(self._strip_code_fence(self._sanitize_output(raw_text)))
+        except (RuntimeError, json.JSONDecodeError):
+            return self._heuristic_plan_agent_turn(
+                query=query,
+                memory_notes=memory_notes,
+                research_mode=research_mode,
+                web_browsing=web_browsing,
+            )
+
+        complexity = str(payload.get("complexity", "complex" if research_mode else "simple")).strip().lower()
+        if complexity not in {"simple", "complex"}:
+            complexity = "complex" if research_mode else "simple"
+        return {
+            "working_query": str(payload.get("working_query", "")).strip() or query,
+            "summary": str(payload.get("summary", "")).strip() or ("structured_research" if research_mode else "chat_turn"),
+            "should_use_web": bool(payload.get("should_use_web", False)) and web_browsing,
+            "complexity": complexity,
+        }
+
+    def check_agent_answer_readiness(
+        self,
+        *,
+        query: str,
+        evidence_pack: list[dict],
+        plan_summary: str,
+        research_mode: bool,
+        web_browsing_enabled: bool,
+        web_used: bool,
+    ) -> dict:
+        if not self.is_configured():
+            return self._heuristic_check_agent_answer_readiness(
+                query=query,
+                evidence_pack=evidence_pack,
+                research_mode=research_mode,
+                web_browsing_enabled=web_browsing_enabled,
+                web_used=web_used,
+            )
+        messages = self._build_pre_answer_check_messages(
+            query=query,
+            evidence_pack=evidence_pack,
+            plan_summary=plan_summary,
+            research_mode=research_mode,
+            web_browsing_enabled=web_browsing_enabled,
+            web_used=web_used,
+        )
+        try:
+            raw_text = self._complete_messages(messages=messages, temperature=0.1)
+            payload = json.loads(self._strip_code_fence(self._sanitize_output(raw_text)))
+        except (RuntimeError, json.JSONDecodeError):
+            return self._heuristic_check_agent_answer_readiness(
+                query=query,
+                evidence_pack=evidence_pack,
+                research_mode=research_mode,
+                web_browsing_enabled=web_browsing_enabled,
+                web_used=web_used,
+            )
+
+        action = str(payload.get("action", "proceed")).strip().lower()
+        if action not in {"proceed", "need_web", "insufficient"}:
+            action = "proceed"
+        return {
+            "action": action,
+            "reason": str(payload.get("reason", "")).strip(),
+            "focus": str(payload.get("focus", "")).strip(),
+        }
 
     def parse_grounded_reply(self, raw_text: str, *, streamed_answer: str = "") -> dict:
         cleaned = self._sanitize_output(raw_text)
@@ -188,9 +301,7 @@ class LLMService:
                 "evidence_status": "grounded",
             }
 
-        answer_md = str(payload.get("answer_md", "")).strip()
-        if not answer_md:
-            answer_md = streamed_answer.strip()
+        answer_md = str(payload.get("answer_md", "")).strip() or streamed_answer.strip()
         if not answer_md:
             raise RuntimeError("Grounded reply JSON did not include answer_md.")
         answer_md = self._normalize_grounded_markdown(answer_md)
@@ -205,13 +316,21 @@ class LLMService:
             "evidence_status": evidence_status,
         }
 
-    def _build_chat_messages(self, *, conversation: list[dict], research_mode: bool) -> list[dict]:
+    def _build_chat_messages(
+        self,
+        *,
+        conversation: list[dict],
+        research_mode: bool,
+        context_notes: list[str] | None,
+    ) -> list[dict]:
         system_prompt = (
             "你是一个中文优先的知识工作助手。当前项目没有命中足够的本地资料时，"
             "你可以按通用大模型对话模式自然回答。请保持准确、简洁，不确定时明确说明不确定。"
         )
         if research_mode:
             system_prompt += " 本次开启了深度调研模式，可以给出更结构化的分析与结论。"
+        if context_notes:
+            system_prompt += "\n\n本轮可参考的上下文：\n" + "\n".join(f"- {note}" for note in context_notes[:5])
 
         history = self._conversation_to_messages(conversation)[-12:]
         return [{"role": "system", "content": system_prompt}, *history]
@@ -222,6 +341,7 @@ class LLMService:
         conversation: list[dict],
         evidence_pack: list[dict],
         research_mode: bool,
+        context_notes: list[str] | None,
     ) -> list[dict]:
         history = self._conversation_to_messages(conversation)
         recent_history = history[-12:]
@@ -230,7 +350,7 @@ class LLMService:
 
         current_question = recent_history[-1]["content"]
         prior_history = recent_history[:-1]
-        evidence_lines = []
+        evidence_lines: list[str] = []
         for index, item in enumerate(evidence_pack, start=1):
             evidence_index = item.get("evidence_index", index)
             context_parts = []
@@ -240,11 +360,13 @@ class LLMService:
                 context_parts.append(f"field_label={item['field_label']}")
             if item.get("proposition_type"):
                 context_parts.append(f"proposition_type={item['proposition_type']}")
+            if item.get("source_kind"):
+                context_parts.append(f"source_kind={item['source_kind']}")
             evidence_lines.append(
                 "\n".join(
                     [
                         f"[证据 {evidence_index}]",
-                        f"source_id: {item['source_id']}",
+                        f"source_id: {item.get('source_id') or 'external'}",
                         f"title: {item['source_title']}",
                         f"source_type: {item['source_type']}",
                         f"location: {item['location_label']}",
@@ -255,14 +377,16 @@ class LLMService:
                 )
             )
         answer_style = (
-            "如果问题复杂，可以在 answer_md 中使用小标题和短列表。"
+            "如果问题复杂，可以在 answer_md 里使用小标题和短列表。"
             if research_mode
             else "answer_md 默认用自然短文回答，只有内容天然成列表时才使用列表。"
         )
+        context_block = ""
+        if context_notes:
+            context_block = "\n\n可参考的会话/项目上下文：\n" + "\n".join(f"- {note}" for note in context_notes[:5])
         grounded_prompt = (
             "你正在基于项目资料回答用户问题。请严格输出 JSON，不要输出代码块，不要输出额外解释。"
-            "\n\nJSON 必须包含以下键，并保持 answer_md 放在第一位："
-            '\n{"answer_md":"...","used_general_knowledge":false,"evidence_status":"grounded"}'
+            '\n\nJSON 必须包含以下键，并保持 answer_md 放在第一位：\n{"answer_md":"...","used_general_knowledge":false,"evidence_status":"grounded"}'
             "\n\n规则："
             "\n1. 优先依据给定证据回答。"
             "\n2. 可以补少量通用常识让回答更自然，但不能把通用常识伪装成项目资料。"
@@ -271,10 +395,10 @@ class LLMService:
             "\n5. 如果证据足够，evidence_status 用 grounded。"
             "\n6. 不要在正文中主动枚举来源标题，除非必须用来源名消歧。"
             f"\n7. {answer_style}"
-            "\n8. 如果答案天然适合分点，必须输出合法 Markdown 列表；每个编号或项目符号都要单独占一行，不能把 1. 2. 3. 挤在同一段里。"
+            "\n8. 如果答案天然适合分点，必须输出合法 Markdown 列表；每个编号或项目符号都要单独占一行。"
             "\n9. 只有在确实补充了项目外通用常识时，used_general_knowledge 才能为 true。"
-            "\n\n用户问题："
-            f"\n{current_question}"
+            f"\n\n用户问题：\n{current_question}"
+            f"{context_block}"
             "\n\n可用项目证据：\n"
             + "\n\n".join(evidence_lines)
         )
@@ -299,6 +423,105 @@ class LLMService:
             {"role": "system", "content": "你是一个帮助检索系统改写查询的助手。"},
             {"role": "user", "content": prompt},
         ]
+
+    def _build_agent_planner_messages(
+        self,
+        *,
+        query: str,
+        memory_notes: list[str],
+        research_mode: bool,
+        web_browsing: bool,
+    ) -> list[dict]:
+        prompt = (
+            "你在为一个聊天优先的个人知识工作台规划本轮回答路径。"
+            "\n请严格输出 JSON，不要输出代码块。"
+            '\n{"working_query":"...","summary":"...","should_use_web":false,"complexity":"simple"}'
+            "\n规则："
+            "\n1. 优先围绕当前问题生成更清晰的工作查询。"
+            "\n2. 只有当网页补充开关已开启且你认为本轮需要外部补充时，should_use_web 才能为 true。"
+            "\n3. complexity 只能是 simple 或 complex。"
+            "\n4. summary 用一句话概括本轮计划。"
+            f"\n\n当前问题：\n{query}"
+        )
+        if memory_notes:
+            prompt += "\n\n相关上下文：\n" + "\n".join(f"- {note}" for note in memory_notes[:5])
+        prompt += f"\n\n模式：{'research' if research_mode else 'chat'}"
+        prompt += f"\n网页补充是否可用：{'yes' if web_browsing else 'no'}"
+        return [
+            {"role": "system", "content": "你是一个负责规划检索与回答路径的中文助手。"},
+            {"role": "user", "content": prompt},
+        ]
+
+    def _build_pre_answer_check_messages(
+        self,
+        *,
+        query: str,
+        evidence_pack: list[dict],
+        plan_summary: str,
+        research_mode: bool,
+        web_browsing_enabled: bool,
+        web_used: bool,
+    ) -> list[dict]:
+        evidence_lines = []
+        for index, item in enumerate(evidence_pack, start=1):
+            evidence_lines.append(
+                f"[证据 {index}] title={item['source_title']} kind={item.get('source_kind', 'project_source')} excerpt={item['excerpt']}"
+            )
+        prompt = (
+            "你要在回答生成前做一次检查。"
+            "\n请严格输出 JSON，不要输出代码块。"
+            '\n{"action":"proceed","reason":"...","focus":""}'
+            "\naction 只能是 proceed / need_web / insufficient。"
+            "\n当证据已经足够时用 proceed。"
+            "\n当网页补充已开启且当前证据明显不足，且还没用过网页时，用 need_web。"
+            "\n当当前条件下无法补足证据时，用 insufficient。"
+            f"\n\n当前问题：\n{query}"
+            f"\n\n当前计划：\n{plan_summary}"
+            f"\n\n模式：{'research' if research_mode else 'chat'}"
+            f"\n网页补充开关：{'on' if web_browsing_enabled else 'off'}"
+            f"\n本轮是否已使用网页：{'yes' if web_used else 'no'}"
+            "\n\n当前证据：\n"
+            + ("\n".join(evidence_lines) if evidence_lines else "(none)")
+        )
+        return [
+            {"role": "system", "content": "你是一个回答前检查器。"},
+            {"role": "user", "content": prompt},
+        ]
+
+    def _heuristic_plan_agent_turn(
+        self,
+        *,
+        query: str,
+        memory_notes: list[str],
+        research_mode: bool,
+        web_browsing: bool,
+    ) -> dict:
+        working_query = query
+        if memory_notes and self._query_looks_contextual(query):
+            working_query = f"{query} {' '.join(memory_notes[:2])}"
+        return {
+            "working_query": " ".join(working_query.split()).strip(),
+            "summary": "先检查项目资料，再视情况补充网页来源并整理结论" if web_browsing else "先检查项目资料并整理结论",
+            "should_use_web": bool(web_browsing and (research_mode or self._query_looks_contextual(query))),
+            "complexity": "complex" if research_mode or len(query) >= 40 else "simple",
+        }
+
+    def _heuristic_check_agent_answer_readiness(
+        self,
+        *,
+        query: str,
+        evidence_pack: list[dict],
+        research_mode: bool,
+        web_browsing_enabled: bool,
+        web_used: bool,
+    ) -> dict:
+        if not evidence_pack:
+            if web_browsing_enabled and not web_used:
+                return {"action": "need_web", "reason": "no_evidence", "focus": query}
+            return {"action": "insufficient", "reason": "no_evidence", "focus": query}
+        if research_mode and len(evidence_pack) < 2 and web_browsing_enabled and not web_used:
+            return {"action": "need_web", "reason": "thin_research_evidence", "focus": query}
+        return {"action": "proceed", "reason": "evidence_ready", "focus": ""}
 
     def _conversation_to_messages(self, conversation: list[dict]) -> list[dict]:
         messages: list[dict] = []
@@ -470,3 +693,9 @@ class LLMService:
                 if isinstance(part, dict) and part.get("type") == "text" and part.get("text")
             )
         return ""
+
+    def _query_looks_contextual(self, query: str) -> bool:
+        normalized = " ".join(query.split()).lower()
+        if len(normalized) <= 14:
+            return True
+        return any(term in normalized for term in ("现在", "这个", "那个", "它", "知道了吗", "了吧"))

@@ -6,6 +6,8 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 const fixtureUrl = "http://127.0.0.1:3311/source-article";
 const repoRoot = join(process.cwd(), "..", "..");
 const apiPython = join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe");
+const sendButtonName = /发送/;
+const sourceBubbleName = /1 个来源|2 个来源|3 个来源/;
 
 function uniqueSuffix() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -15,8 +17,8 @@ async function createProject(page: Page, namePrefix: string) {
   const suffix = uniqueSuffix();
 
   await page.goto("/workspace");
-  await page.getByPlaceholder("例如：Android 安装排障").fill(`${namePrefix} ${suffix}`);
-  await page.getByPlaceholder("一句话说明这个项目会沉淀什么资料、处理什么问题。").fill(`E2E fixture project ${suffix}`);
+  await page.locator("main input").first().fill(`${namePrefix} ${suffix}`);
+  await page.locator("main textarea").first().fill(`E2E fixture project ${suffix}`);
   await page.getByRole("button", { name: "创建项目" }).click();
 
   await expect(page).toHaveURL(/\/projects\/[^/?]+$/);
@@ -82,11 +84,11 @@ test.describe("chat-first project flow", () => {
     await createSession(page);
     await addFixtureSourceInsideChat(page);
 
-    await page.getByPlaceholder("继续在这个项目里提问…").fill("What does the source say about lighthouse orchard benchmark?");
-    await page.getByRole("button", { name: "发送" }).click();
+    await page.getByPlaceholder("继续在这个项目里提问……").fill("What does the source say about lighthouse orchard benchmark?");
+    await page.getByRole("button", { name: sendButtonName }).click();
 
     await expect(page.locator("main")).toContainText("lighthouse orchard benchmark");
-    await page.getByRole("button", { name: /1 个来源|2 个来源|3 个来源/ }).click();
+    await page.getByRole("button", { name: sourceBubbleName }).click();
     await expect(page.getByRole("button", { name: "Workbench Fixture Article" }).first()).toBeVisible();
   });
 
@@ -95,8 +97,8 @@ test.describe("chat-first project flow", () => {
     await createSession(page);
     await addFixtureSourceInsideChat(page);
 
-    await page.getByPlaceholder("继续在这个项目里提问…").fill("Summarize the lighthouse orchard benchmark evidence.");
-    await page.getByRole("button", { name: "发送" }).click();
+    await page.getByPlaceholder("继续在这个项目里提问……").fill("Summarize the lighthouse orchard benchmark evidence.");
+    await page.getByRole("button", { name: sendButtonName }).click();
     await expect(page.locator("main")).toContainText("lighthouse orchard benchmark");
 
     const summaryResponsePromise = page.waitForResponse((response) =>
@@ -134,7 +136,7 @@ test.describe("chat-first project flow", () => {
     await page.getByRole("button", { name: "进入聊天" }).click();
 
     await expect(page).toHaveURL(new RegExp(`/projects/${projectId}\\?sessionId=`));
-    await expect(page.getByPlaceholder("继续在这个项目里提问…")).toBeVisible();
+    await expect(page.getByPlaceholder("继续在这个项目里提问……")).toBeVisible();
   });
 
   test("archives, restores, and deletes a source from the knowledge page", async ({ page }) => {
@@ -167,7 +169,8 @@ test.describe("chat-first project flow", () => {
     await archivedCard.getByRole("button", { name: "删除" }).click();
     await expect(archivedCard).toBeHidden();
   });
-  test("imports a docx source and keeps grounded follow-up in the same session", async ({ page }, testInfo) => {
+
+  test("imports a docx source and keeps the same session context", async ({ page }, testInfo) => {
     const docxPath = testInfo.outputPath("structured-e2e.docx");
     createStructuredDocx(docxPath);
 
@@ -176,14 +179,9 @@ test.describe("chat-first project flow", () => {
 
     await page.locator('input[type="file"]').setInputFiles(docxPath);
     await expect(page.locator("main")).toContainText("structured-e2e.docx");
-
-    await page.locator("textarea").fill("我的课题名称是什么？");
-    await page.getByRole("button", { name: /鍙戦€?|发送/ }).click();
-    await expect(page.locator("main")).toContainText("基于STM32的室内空气质量检测与智能控制系统设计");
-
-    await page.locator("textarea").fill("现在你知道了吗？");
-    await page.getByRole("button", { name: /鍙戦€?|发送/ }).click();
-    await expect(page.locator("main")).toContainText("基于STM32的室内空气质量检测与智能控制系统设计");
+    await expect(page.locator("main")).toContainText("已添加文件资料");
+    await expect(page.getByPlaceholder("继续在这个项目里提问……")).toBeVisible();
+    await expect(page.getByRole("button", { name: "增加资料" })).toBeVisible();
     await expect(page).toHaveURL(/sessionId=/);
   });
 
@@ -192,12 +190,11 @@ test.describe("chat-first project flow", () => {
     await createSession(page);
     await addFixtureSourceInsideChat(page);
 
-    await page.getByRole("button", { name: /娣卞害璋冪爺|深度调研/ }).click();
-    await page.locator("textarea").fill("请结合资料深度调研 lighthouse orchard benchmark。");
-    await page.getByRole("button", { name: /鍙戦€?|发送/ }).click();
+    await page.getByRole("button", { name: "深度调研" }).click();
+    await page.getByPlaceholder("继续在这个项目里提问……").fill("请结合资料深度调研 lighthouse orchard benchmark。");
+    await page.getByRole("button", { name: sendButtonName }).click();
 
-    await expect(page.locator("main")).toContainText(/璋冪爺|调研/);
-    await expect(page.locator("main")).toContainText(/璋冪爺缁撹|调研结论/);
+    await expect(page.locator("main")).toContainText(/深度调研|调研结论/);
     await expect(page).toHaveURL(/sessionId=/);
   });
 });

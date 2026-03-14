@@ -150,7 +150,8 @@ def test_grounded_complex_query_enables_v1_rerank(client, monkeypatch, html_serv
     detail = response.json()["item"]
     assert captured["apply_rerank"] is True
     assert captured["history"][-1]["content_md"]
-    assert all(item["message_type"] != "status_card" for item in detail["messages"])
+    assert any(item["message_type"] == "status_card" and item["title"] == "正在查项目资料" for item in detail["messages"])
+    assert any(item["message_type"] == "status_card" and item["title"] == "正在整理结论" for item in detail["messages"])
     answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
     assert answer["title"] is None
 
@@ -190,14 +191,14 @@ def test_explicit_deep_research_always_reranks_and_uses_five_evidences(client, m
     assert response.status_code == 200, response.text
     detail = response.json()["item"]
 
-    assert captured["limit"] == 10
+    assert captured["limit"] == 12
     assert captured["apply_rerank"] is True
     assert captured["history"][-1]["content_md"]
     answer = next(item for item in detail["messages"] if item["message_type"] == "assistant_answer")
     assert answer["title"] == "调研结论"
     assert len(answer["sources"]) == 5
-    assert any(item["message_type"] == "status_card" and item["title"] == "调研中" for item in detail["messages"])
-    assert any(item["message_type"] == "status_card" and item["title"] == "调研完成" for item in detail["messages"])
+    assert any(item["message_type"] == "status_card" and item["title"] == "正在查项目资料" for item in detail["messages"])
+    assert any(item["message_type"] == "status_card" and item["title"] == "正在整理结论" for item in detail["messages"])
 
 
 def test_grounded_stream_returns_llm_generated_markdown_and_metadata(client, monkeypatch, html_server):

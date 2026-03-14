@@ -254,3 +254,31 @@ Not in the current V2 mainline:
 - Self-RAG
 - RL-enhanced RAG
 - full multimodal RAG
+
+## V3 Runtime
+
+V3 upgrades the backend into a chat-first agentic runtime while keeping the public product language unchanged.
+
+- Internal orchestration now uses `LangGraph`
+- All message sends enter a bounded graph runtime by default
+- Project retrieval is still the primary evidence source
+- `联网补充` is a manual per-turn option, not an automatic escalation
+- Session memory and project memory are stored internally and reused on later turns
+- External web evidence is kept separate from project knowledge until the user explicitly saves it
+- The legacy V2 flow is still available via `WORKBENCH_AGENT_RUNTIME_VERSION=v2`
+
+V3 does not turn the product into a public agent platform:
+
+- no public tool panel
+- no reasoning trace
+- no LangGraph terminology in the frontend
+
+## V3 Verification
+
+```powershell
+apps/api/.venv/Scripts/python.exe -m pytest tests/backend
+corepack pnpm --dir apps/web typecheck
+corepack pnpm --dir apps/web test
+corepack pnpm --dir apps/web build
+corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts
+```

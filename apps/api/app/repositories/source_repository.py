@@ -414,9 +414,27 @@ class SourceRepository:
         refresh_strategy: str,
     ) -> SourceRecord:
         now = datetime.now(UTC).isoformat()
-        source_id = str(uuid4())
         connection = get_connection()
         try:
+            existing_row = connection.execute(
+                """
+                SELECT id
+                FROM sources
+                WHERE project_id = ?
+                  AND canonical_uri = ?
+                  AND deleted_at IS NULL
+                  AND ingestion_status != 'archived'
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (project_id, canonical_uri),
+            ).fetchone()
+            if existing_row is not None:
+                existing = self.get_source(str(existing_row["id"]))
+                if existing is not None:
+                    return existing
+
+            source_id = str(uuid4())
             connection.execute(
                 """
                 INSERT INTO sources (

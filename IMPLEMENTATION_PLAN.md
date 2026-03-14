@@ -318,6 +318,53 @@
   - structured chunk metadata added to `source_chunks`
   - DOCX ingestion now preserves heading / paragraph / table-row / field structure
   - PDF ingestion now applies lightweight heading and field detection before chunk assembly
+
+## 13. V3 Chat-First Agentic Upgrade
+
+- V3 keeps the public product mental model unchanged:
+  - project
+  - session
+  - message
+  - knowledge
+  - source
+  - deep research
+- LangGraph is now used as an internal orchestration layer only.
+- All message sends now enter a graph-backed runtime with a version switch:
+  - `v3` default: graph orchestration enabled
+  - `v2` fallback: legacy direct session flow
+- The V3 graph is intentionally bounded and does not expose agent-platform concepts in the UI:
+  - `chat_graph`
+  - `research_graph`
+  - no unbounded tool loop
+  - no public reasoning trace
+- New internal V3 capabilities completed:
+  - project retrieval remains the primary evidence source
+  - optional manual web supplementation via `web_browsing`
+  - session memory and project memory persistence
+  - pre-answer readiness checking before final generation
+  - project-source and external-web evidence can coexist in the final source layer
+- Public API surface stayed stable:
+  - existing route families unchanged
+  - `POST /api/v1/sessions/{session_id}/messages`
+  - `POST /api/v1/sessions/{session_id}/messages/stream`
+  - only one new optional request field added: `web_browsing`
+- Frontend V3 completion:
+  - composer now includes a manual `联网补充` toggle beside `深度调研`
+  - source bubble can render both project evidence and external web evidence
+  - external web evidence can be manually saved into the knowledge base
+- Backend V3 completion:
+  - `AgentOrchestratorService`
+  - `MemoryService`
+  - `WebResearchService`
+  - `memory_entries` persistence
+  - `message_sources.source_kind`
+  - `message_sources.external_uri`
+- V3 regression coverage now includes:
+  - graph runtime fallback to V2
+  - web branch disabled / enabled behavior
+  - memory persistence after successful grounded answers
+  - frontend composer toggle behavior
+  - mixed project/web source rendering
   - retrieval scoring now considers `section_type`, `heading_path`, `field_label`, and `table_origin`
   - source preview now exposes structured chunk metadata for backend/frontend use
 - Metadata added for this slice:

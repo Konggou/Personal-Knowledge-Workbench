@@ -218,11 +218,13 @@ class SessionRepository:
                     SELECT
                       id,
                       source_id,
+                      source_kind,
                       chunk_id,
                       source_rank,
                       source_type,
                       source_title,
                       canonical_uri,
+                      external_uri,
                       location_label,
                       excerpt,
                       relevance_score
@@ -349,21 +351,23 @@ class SessionRepository:
                 connection.execute(
                     """
                     INSERT INTO message_sources (
-                      id, message_id, session_id, project_id, source_id, chunk_id, source_rank,
-                      source_type, source_title, canonical_uri, location_label, excerpt, relevance_score, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      id, message_id, session_id, project_id, source_id, source_kind, chunk_id, source_rank,
+                      source_type, source_title, canonical_uri, external_uri, location_label, excerpt, relevance_score, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         str(uuid4()),
                         message_id,
                         session_id,
                         project_id,
-                        source["source_id"],
+                        source.get("source_id"),
+                        source.get("source_kind", "project_source"),
                         source.get("chunk_id"),
                         index,
                         source["source_type"],
                         source["source_title"],
                         source["canonical_uri"],
+                        source.get("external_uri"),
                         source["location_label"],
                         source["excerpt"],
                         float(source["relevance_score"]),
@@ -451,11 +455,13 @@ class SessionRepository:
                 SELECT
                   id,
                   source_id,
+                  source_kind,
                   chunk_id,
                   source_rank,
                   source_type,
                   source_title,
                   canonical_uri,
+                  external_uri,
                   location_label,
                   excerpt,
                   relevance_score

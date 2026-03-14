@@ -599,6 +599,38 @@
   color: #3d4d5f;
 }
 
+.externalSourceCard {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 248, 240, 0.8);
+}
+
+.externalSourceCard p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.externalSourceActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.externalSourceActions a,
+.externalSourceActions button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent-primary);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
 .composerDock {
   position: relative;
   z-index: 12;
