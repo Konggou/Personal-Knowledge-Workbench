@@ -3,9 +3,10 @@
 ## 1. 总体原则
 
 - 前后端分离
-- 一个状态库 + 一个向量库
-- 前台公开语义统一使用 `project / session / message / knowledge / source`
-- `task` 只允许作为内部实现思路，不作为前台主术语
+- SQLite 是唯一结构化状态中心
+- Qdrant 是默认向量检索后端
+- 前台公开语义统一使用：`项目 / 会话 / 消息 / 知识库 / 来源`
+- `task` 只允许作为后端内部实现思路，不作为前台主术语
 - Windows 优先
 - 本地运行优先
 - 尽量减少系统级依赖
@@ -26,7 +27,7 @@
 - `zod 4.3.6`
 - `lucide-react 0.577.0`
 
-### UI 基础库
+### UI 基础组件
 
 - `@radix-ui/react-dialog 1.1.15`
 - `@radix-ui/react-dropdown-menu 2.1.16`
@@ -44,7 +45,7 @@
 
 ### 约束
 
-- SSR 主要服务于页面结构稳定和 URL 组织
+- SSR 主要服务于页面结构稳定与 URL 组织
 - 项目页是聊天优先界面，不是控制台
 - 不再保留旧的 `/tasks`、`/search`、`/assets`
 
@@ -53,80 +54,104 @@
 ### 主框架
 
 - `Python 3.12`
-- `FastAPI 0.135.1`
-- `Pydantic 2.12.5`
-- `Uvicorn 0.41.0`
+- `FastAPI`
+- `Pydantic`
+- `Uvicorn`
 
 ### 运行模式
 
 - 单体 API 服务
-- 单体进程内托管会话消息生成与资料入库
+- 单进程内承载会话消息、检索、资料入库和生成逻辑
 - 不拆分多服务
 
 ### API 语义
 
-- `/projects`
-- `/sessions`
-- `/knowledge`
-- `/sources`
+- `/api/v1/projects`
+- `/api/v1/sessions`
+- `/api/v1/knowledge`
+- `/api/v1/sources`
 
-旧 `task` 语义不再作为公开主路线。
+旧的 task 语义不再作为公开主路径。
 
 ## 4. 存储
 
-### 状态库
+### 结构化状态
 
 - `SQLite`
 
-负责：
+负责保存：
 
 - 项目
 - 项目快照
 - 资料元数据
 - 会话
 - 会话消息
-- 消息来源映射
+- 来源挂载关系
+- memory entries
+- FTS 元数据
 
-### 向量库
+### 向量检索
 
 - `Qdrant`
 
-默认使用 embedded 模式，可在本地直接启动，无需额外安装独立服务。
+默认使用 embedded 模式，可在本地直接运行，无需额外安装独立服务。
 
 ## 5. 检索与模型
 
 ### 检索链
 
-- `SQLite FTS`
+当前主检索链为：
+
+- `SQLite FTS5 MATCH`
+- `bm25(...)`
 - `Qdrant semantic recall`
-- `hybrid merge`
+- `RRF` 融合
+- 有界 rerank
+
+### rerank 能力
+
+- `rule`
+- `cross_encoder_local`
+- `cross_encoder_remote`
 
 ### 模型能力
 
-- `sentence-transformers 5.2.3` 负责 embedding
-- 问答与调研生成由后端统一调度
+- `sentence-transformers` 负责 embedding
+- LLM 负责：
+  - 普通对话
+  - grounded 回答生成
+  - 深度调研生成
 
 ### 默认策略
 
-- 当前检索链以稳定的混合检索为主
-- 后续可继续升级为更强的结构化/语义切块与 rerank
+- 默认网页聊天优先走低延迟路径
+- 当本轮消息没有开启：
+  - `深度调研`
+  - `联网补充`
+  planner 与 readiness 优先走启发式
 
 ## 6. 实时通信
 
-- SSE 用于会话事件流
-- 当前事件流更偏回放式，不是 token 级实时生成
+- SSE 用于会话流式事件
+- 当前主要承载：
+  - status
+  - delta
+  - done
 
 ## 7. 测试栈
 
 ### 前端
 
-- `Vitest 4.0.18`
-- `@testing-library/react 16.3.0`
+- `Vitest`
+- `@testing-library/react`
 - `Playwright`
+- `TypeScript typecheck`
 
 ### 后端
 
-- `pytest 9.0.2`
+- `pytest`
+- `compileall`
+- 本地 retrieval eval runner
 
 ## 8. 启动策略
 
@@ -136,12 +161,32 @@
 - `.\scripts\start-api.ps1`
 - `.\scripts\start-web.ps1`
 
-## 9. 非目标技术项
+默认本地链路：
 
-v1 不做：
+- Web：`http://127.0.0.1:3000`
+- API：`http://127.0.0.1:8010`
 
-- 多租户认证
-- 服务拆分
-- 旧 schema 兼容迁移
-- 插件系统
-- 桌面壳分发
+## 9. 版本演进摘要
+
+### V2
+
+- 上下文改写
+- 条件 HyDE
+- structured chunking
+- evidence selection
+- retrieval eval
+
+### V3
+
+- 聊天优先 Agent 运行时
+- `联网补充`
+- memory entries
+- external web evidence
+
+### V4
+
+- `FTS5 + bm25`
+- `RRF`
+- 独立 reranker
+- retrieval index version
+- 默认聊天低延迟优化

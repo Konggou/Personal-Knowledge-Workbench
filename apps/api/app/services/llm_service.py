@@ -205,7 +205,11 @@ class LLMService:
         research_mode: bool,
         web_browsing: bool,
     ) -> dict:
-        if not self.is_configured():
+        if not self.is_configured() or self._should_use_heuristic_planner(
+            query=query,
+            research_mode=research_mode,
+            web_browsing=web_browsing,
+        ):
             return self._heuristic_plan_agent_turn(
                 query=query,
                 memory_notes=memory_notes,
@@ -255,7 +259,15 @@ class LLMService:
         diagnostics: dict | None = None,
         project_retry_count: int = 0,
     ) -> dict:
-        if not self.is_configured():
+        if not self.is_configured() or self._should_use_heuristic_readiness(
+            query=query,
+            evidence_pack=evidence_pack,
+            research_mode=research_mode,
+            web_browsing_enabled=web_browsing_enabled,
+            web_used=web_used,
+            diagnostics=diagnostics,
+            project_retry_count=project_retry_count,
+        ):
             return self._heuristic_check_agent_answer_readiness(
                 query=query,
                 evidence_pack=evidence_pack,
@@ -297,6 +309,45 @@ class LLMService:
             "reason": str(payload.get("reason", "")).strip(),
             "focus": str(payload.get("focus", "")).strip(),
         }
+
+    def _should_use_heuristic_planner(self, *, query: str, research_mode: bool, web_browsing: bool) -> bool:
+        if research_mode:
+            return False
+            return True
+        if web_browsing:
+            return False
+        return True
+
+    def _should_use_heuristic_readiness(
+        self,
+        *,
+        query: str,
+        evidence_pack: list[dict],
+        research_mode: bool,
+        web_browsing_enabled: bool,
+        web_used: bool,
+        diagnostics: dict | None,
+        project_retry_count: int,
+    ) -> bool:
+        if research_mode:
+            return False
+        if not web_browsing_enabled and not web_used:
+            return True
+        if web_browsing_enabled and not web_used:
+            return False
+        if project_retry_count > 0:
+            return True
+        if self._query_looks_factoid(query) and not self._query_looks_complex(query):
+            return True
+        effective = (diagnostics or {}).get("effective_pass") or (diagnostics or {}).get("first_pass", {})
+        top_score = float(effective.get("top_score", 0.0) or 0.0)
+        field_hit_count = int(effective.get("field_hit_count", 0) or 0)
+        term_coverage_ratio = float(effective.get("term_coverage_ratio", 0.0) or 0.0)
+        if field_hit_count > 0 and top_score >= 1.8:
+            return True
+        if evidence_pack and top_score >= 3.0 and term_coverage_ratio >= 0.34:
+            return True
+        return False
 
     def parse_grounded_reply(self, raw_text: str, *, streamed_answer: str = "") -> dict:
         cleaned = self._sanitize_output(raw_text)

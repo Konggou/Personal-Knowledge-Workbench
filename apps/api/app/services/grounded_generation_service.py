@@ -413,8 +413,8 @@ class GroundedGenerationService:
             return False
 
         top_score = max(float(item.get("relevance_score", 0.0)) for item in evidences)
-        first_pass = diagnostics.get("first_pass", {})
-        term_coverage_ratio = float(first_pass.get("term_coverage_ratio", 0.0) or 0.0)
+        pass_diagnostics = diagnostics.get("effective_pass") or diagnostics.get("first_pass", {})
+        term_coverage_ratio = float(pass_diagnostics.get("term_coverage_ratio", 0.0) or 0.0)
         field_or_proposition_hits = any(
             str(item.get("section_type") or "body") in {"field", "proposition"} for item in evidences[:5]
         )
@@ -438,6 +438,8 @@ class GroundedGenerationService:
             and top_score >= 0.5
             and len(matched_terms) >= min(3, max(2, len(query_terms) // 2 or 2))
         )
+        if field_or_proposition_hits and top_score >= 1.8:
+            return True
 
         if top_score < MIN_ACCEPTED_TOP_SCORE:
             if strong_semantic_overlap:

@@ -1,556 +1,179 @@
-﻿Personal Knowledge Workbench v1 Progress
-Last Updated: 2026-03-13
+个人知识工作台 v1 进展
+最后更新：2026-03-16
 
-Read This First
-- Every new AI session should read this file first.
-- Product truth lives in: PRD.md, APP_FLOW.md, TECH_STACK.md, FRONTEND_GUIDELINES.md, BACKEND_STRUCTURE.md, IMPLEMENTATION_PLAN.md, AGENTS.md.
-- Current public app structure is chat-first, not task-first.
+先读这里
+- 每次新的 AI 会话都应先阅读本文件
+- 产品真相文档包括：
+  - `PRD.md`
+  - `APP_FLOW.md`
+  - `TECH_STACK.md`
+  - `FRONTEND_GUIDELINES.md`
+  - `BACKEND_STRUCTURE.md`
+  - `IMPLEMENTATION_PLAN.md`
+  - `AGENTS.md`
+- 当前公开产品结构是聊天优先，而不是 task-first
 
-Current Status
-- v1 chat-first restructuring is complete and usable.
-- grounded Q&A now follows a generated RAG path instead of directly surfacing retrieved excerpts.
-- Project chat page has been upgraded from a multi-card workbench to an integrated chat-first layout.
-- Public frontend routes are now:
-  - /workspace
-  - /sessions
-  - /knowledge
-  - /projects/[projectId]
-  - /projects/[projectId]?sessionId=...
-- Old frontend routes are removed:
-  - /tasks
-  - /search
-  - /assets
-  - dedicated project task detail page
-- Public backend API is now centered on:
-  - /api/v1/projects
-  - /api/v1/sessions
-  - /api/v1/knowledge
-  - /api/v1/sources
-- Frontend main mental model is now:
-  - project = knowledge container
-  - session = project chat thread
-  - message = primary interaction unit
-  - source = lightweight evidence layer
+当前状态
+- v1 聊天优先重构已经完成，主闭环可用
+- 项目聊天页已经从多卡片工作台改造成整体化聊天界面
+- grounded 问答已经走生成式 RAG 主链，而不是直接贴检索片段
+- 公开前端路由已经稳定为：
+  - `/workspace`
+  - `/sessions`
+  - `/knowledge`
+  - `/projects/[projectId]`
+  - `/projects/[projectId]?sessionId=...`
+- 旧前台路由已移除：
+  - `/tasks`
+  - `/search`
+  - `/assets`
+  - 独立 task 详情页
+- 公开后端 API 族稳定为：
+  - `/api/v1/projects`
+  - `/api/v1/sessions`
+  - `/api/v1/knowledge`
+  - `/api/v1/sources`
 
-Completed
-- Rebuilt SQLite schema around:
-  - _app_metadata
-  - projects
-  - project_snapshots
-  - sources
-  - source_chunks
-  - source_chunk_fts
-  - sessions
-  - session_messages
-  - message_sources
-- Added schema-version-based local state reset for chat-first v1
-- Kept embedded Qdrant as the default vector backend
-- Preserved hybrid retrieval:
-  - SQLite lexical recall
-  - Qdrant semantic recall
-  - merged ranking
-- Replaced public backend semantics:
-  - old task/search/asset-first API retired from router
-  - new sessions + knowledge routes exposed
-- Implemented session APIs:
-  - GET /api/v1/sessions
-  - GET /api/v1/projects/{project_id}/sessions
-  - POST /api/v1/projects/{project_id}/sessions
-  - GET /api/v1/sessions/{session_id}
-  - PATCH /api/v1/sessions/{session_id}
-  - DELETE /api/v1/sessions/{session_id}
-  - POST /api/v1/sessions/{session_id}/messages
-  - POST /api/v1/sessions/{session_id}/summary
-  - POST /api/v1/sessions/{session_id}/report
-  - DELETE /api/v1/messages/{message_id}
-  - GET /api/v1/sessions/{session_id}/events
-- Implemented knowledge API:
-  - GET /api/v1/knowledge
-- Extended source APIs:
-  - project-scoped source listing
-  - web/file source creation
-  - source preview
-  - web URL update
-  - refresh
-  - archive
-  - restore
-  - delete
-- Implemented chat-first frontend pages:
-  - /workspace
-  - /sessions
-  - /knowledge
-  - /projects/[projectId]
-- Rebuilt project page as:
-  - light top navigation
-  - left project-tree sidebar
-  - dominant center chat thread
-  - overlay source preview instead of permanent right column
-- Implemented project empty state:
-  - no auto-open when sessionId is absent
-  - New Session
-  - Go to Knowledge
-- Implemented weak-source-mode banner for chat without indexed project sources
-- Implemented session title auto-generation from first user message
-- Implemented deep-research toggle that stays in the same session
-- Implemented in-chat status cards:
-  - 调研中
-  - 调研完成
-- Implemented in-chat source update cards after source import from chat
-- Implemented source bubble UX:
-  - source count bubble
-  - inline title list
-  - right drawer detailed preview
-- Implemented result cards inside chat:
-  - summary card
-  - report card
-  - copy
-  - soft delete
-- Implemented current-project knowledge drawer
-- Implemented global knowledge page:
-  - grouped by project
-  - search
-  - project filter
-  - preview first
-  - enter chat creates a new session
-- Implemented source lifecycle UI:
-  - archive
-  - restore
-  - delete
-  - refresh (web)
-  - edit URL (web)
-- Updated root docs to match the chat-first product structure:
-  - PRD.md
-  - APP_FLOW.md
-  - TECH_STACK.md
-  - FRONTEND_GUIDELINES.md
-  - BACKEND_STRUCTURE.md
-  - IMPLEMENTATION_PLAN.md
-  - AGENTS.md
-- Reworked the project chat page visual model:
-  - removed the large in-page project header
-  - removed the permanent right knowledge panel
-  - replaced the three-column layout with a true sidebar + main chat layout
-  - made sidebar collapse expand the main chat area
-  - moved project knowledge access to a small entry above the composer
-  - changed assistant content from card-heavy blocks to a lighter prose-first flow
-  - changed the composer into a bottom-docked chat surface
-- Refined the integrated chat layout after visual feedback:
-  - fixed collapsed sidebar controls so the rail no longer shows broken wrapped labels
-  - reduced the visual weight and height of the chat composer
-  - made same-project session switching update immediately instead of feeling unresponsive
-- Fixed remaining root-document mojibake in:
-  - PRD.md
-  - TECH_STACK.md
-  - FRONTEND_GUIDELINES.md
-  - BACKEND_STRUCTURE.md
-  - IMPLEMENTATION_PLAN.md
-  - AGENTS.md
-- Fixed remaining frontend Chinese mojibake in:
-  - workspace page
-  - sessions page
-  - knowledge page
-  - project chat page
-  - top navigation
-- Removed stale public backend/frontend code paths for:
-  - assets
-  - search
-  - tasks
-- Added README.md for startup, routes, stack, and usage overview
-- Fixed file-ingest UX around unsupported Office formats:
-  - file pickers on project chat and knowledge page now explicitly limit selection to PDF and DOCX
-  - unsupported legacy DOC uploads now show a visible error instead of looking like a silent no-op
-  - file inputs now clear after selection so choosing the same file again still triggers upload
-- Upgraded weak-source-mode conversation behavior:
-  - when a session has no grounded project evidence, the backend now keeps the chat going through a generic LLM path instead of always returning a static fallback block
-  - weak-source-mode still remains explicit in metadata, but the reply body can continue as normal conversation
-  - if no LLM is configured, the fallback message now clearly explains the missing model configuration instead of pretending it answered the question
-- Added backend regression coverage for weak-source-mode LLM chat continuation
-- Refined the integrated project chat composer after new UI feedback:
-  - stabilized the in-session file upload trigger by decoupling the hidden file input from the transient add-source menu
-  - reduced the visual weight of the composer and textarea
-  - widened the central chat/composer column and reduced unnecessary side padding
-  - removed the rounded card-like composer shell in favor of a flatter integrated divider-based surface
-- Fixed chat container behavior after desktop usage feedback:
-  - the project sidebar now stays structurally fixed while the chat column owns the page scroll
-  - the composer is now a dedicated bottom layout row instead of an overlay sitting on top of messages
-  - the composer background is visually separated from the transcript so text no longer bleeds into the input zone
-- Added file-based LLM config support:
-  - backend settings now read `.env.local` and `.env` from the repo root
-  - process environment still overrides file values
-  - added `.env.local.example` and a local `.env.local` template for MiniMax-compatible OpenAI settings
-  - fixed the file lookup path so repo-root `.env.local` is actually loaded by the API
-- Refactored grounded answers into a generated RAG flow:
-  - grounded now uses `hybrid retrieval -> conditional rerank -> final evidence selection -> evidence pack -> LLM generation`
-  - ordinary grounded questions keep a final evidence budget of 3
-  - explicit deep research keeps a final evidence budget of 5
-  - complex ordinary questions now only trigger rerank and no longer auto-upgrade to deep research
-  - invalid grounded JSON now falls back to markdown without dropping the reply
-  - partial grounded streams now keep emitted content and append a lightweight interruption note
-- Added a v1 retrieval-quality upgrade pass for project chat:
-  - low-confidence project retrieval can now trigger a conditional HyDE/query-expansion retry instead of immediately falling back to weak-source-mode
-  - the current HyDE trigger is still heuristic-based (`empty / low-score / weak-term-coverage`) and is explicitly a v1 simplification
-  - later upgrades should consider smarter trigger policies based on real query logs, richer retrieval features, or a dedicated lightweight judge
-- Refined ordinary project-answer presentation:
-  - normal assistant answers no longer show visible titles like `通用对话` or `基于当前资料的回答`
-  - ordinary chat markdown now gets light normalization for squeezed numbered lists before rendering
-  - project chat styles now give ordinary answer text, disclosure notes, and source bubbles stronger contrast
-- Added grounded-answer regression coverage for:
-  - ordinary complex grounded questions reranking without auto research
-  - explicit deep research using a 5-evidence budget
-  - grounded stream interruption recovery
-  - frontend grounded streaming placeholder behavior and final source/disclosure mounting
+前台核心心智
+- 项目 = 知识容器
+- 会话 = 项目内对话线程
+- 消息 = 主要交互单元
+- 来源 = 回答底部的轻量证据层
+- 知识库 = 资料管理页
 
-Verified
-- Backend compile check passed:
-  - apps/api/.venv/Scripts/python.exe -m compileall apps/api/app
-- Backend pytest passed:
-  - 18 tests collected
-  - 18 tests passed
-- Frontend typecheck passed:
-  - corepack pnpm --dir apps/web typecheck
-- Frontend vitest passed:
-  - 4 test files
-  - 9 tests passed
-- Frontend build passed:
-  - corepack pnpm --dir apps/web build
-- Playwright E2E passed:
-  - create project -> create session -> add source -> ask -> inspect sources
-  - create summary card + report card inside same session
-  - add source from knowledge page -> preview -> enter chat
-- Composer refinement verification passed:
-  - corepack pnpm --dir apps/web typecheck
-  - corepack pnpm --dir apps/web test -- --run
-  - corepack pnpm --dir apps/web build
-  - corepack pnpm --dir apps/web test:e2e
-- Follow-up UI interaction pass passed:
-  - sidebar collapsed rail renders correctly
-  - lighter composer builds and runs cleanly
-  - session click path still passes end-to-end regression
-- Project layout rebuild passed review-style verification:
-  - sidebar collapse really expands the chat area
-  - no permanent right-side knowledge gap remains on project pages
-  - project page reads as one continuous interface instead of parallel cards
-- Post-cleanup verification passed after removing old task/search/asset remnants
-- UI copy review passed after fixing remaining mojibake
-- Backend weak-source-mode verification passed:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
-  - added regression proving no-evidence chat can continue through the LLM path
-- Frontend source-upload UX verification passed:
-  - corepack pnpm --dir apps/web typecheck
-  - corepack pnpm --dir apps/web test -- --run
-  - corepack pnpm --dir apps/web build
-  - corepack pnpm --dir apps/web test:e2e
-- Chat container verification passed:
-  - corepack pnpm --dir apps/web typecheck
-  - corepack pnpm --dir apps/web build
-  - corepack pnpm --dir apps/web test:e2e
-- File-based config verification passed:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
-  - apps/api/.venv/Scripts/python.exe -c "... get_settings() ..."
-  - verified MiniMax base URL, model, and key presence load from `.env.local`
+已完成
+- 重新设计 SQLite schema，围绕以下表工作：
+  - `_app_metadata`
+  - `projects`
+  - `project_snapshots`
+  - `sources`
+  - `source_chunks`
+  - `source_chunk_fts`
+  - `sessions`
+  - `session_messages`
+  - `message_sources`
+  - `memory_entries`
+- SQLite 保持为唯一结构化状态中心
+- Qdrant 保持为默认向量检索后端
+- 项目页改造成：
+  - 顶部轻导航
+  - 左侧项目树 sidebar
+  - 中间聊天主区
+  - 覆盖式来源预览
+- 实现项目空状态：
+  - 无 `sessionId` 时不自动打开会话
+  - 提供新建会话与前往知识库入口
+- 实现会话主链：
+  - 新建会话
+  - 自动生成标题
+  - 会话重命名
+  - 会话删除
+- 实现资料主链：
+  - 会话内添加资料
+  - 知识库页添加资料
+  - 来源预览
+  - 网页刷新
+  - 网页改链接
+  - 归档 / 恢复 / 删除
+- 实现会话内结果沉淀：
+  - 摘要卡
+  - 报告卡
+  - 复制
+  - 删除
+- 实现流式消息链路：
+  - 用户消息立即出现
+  - 助手消息壳立即出现
+  - delta 流式拼接
+  - 流结束后刷新会话最终状态
+- 实现 markdown 渲染
+- 修复 `.env.local` 配置读取
+- 支持弱资料模式继续对话
 
-In Progress
-- Collect real user feedback on the integrated chat-first UI
-- Improve retrieval quality beyond current stable paragraph chunking
-- Decide whether to add real legacy DOC parsing support or keep the product boundary at PDF/DOCX
+V2 已落地
+- V2.1：
+  - 上下文改写
+  - 字段别名扩展
+  - 条件 HyDE
+  - retrieval diagnostics
+- V2.2：
+  - structured chunking
+  - 标题 / 字段感知
+  - 轻量层级检索
+- V2.3：
+  - evidence selection
+  - contextual compression
+  - low-confidence grounded gating
+- V2.4：
+  - retrieval eval runner
+  - grounded 交付诊断
+  - 扩展后的 Playwright 覆盖
 
-Next
-- Real usage pass by the user
-- If needed, improve:
-  - semantic/structured chunking
-  - agentic runtime quality and bounded graph heuristics
+V3 已落地
+- 引入聊天优先的内部 agent 运行时
+- 保持前台产品语言不变
+- 增加 `联网补充`
+- 支持会话记忆与项目记忆
+- 支持外部网页证据保存到知识库
+- 保留 `WORKBENCH_AGENT_RUNTIME_VERSION=v2` 回退路径
 
-V3 Update
-Last Updated: 2026-03-14
+V4 已落地
+- 分支：`codex/v4-retrieval-optimization`
+- 检索主链升级为：
+  - SQLite `FTS5 + bm25`
+  - Qdrant 语义检索
+  - `RRF` 融合
+  - 独立 reranker
+- reranker 支持：
+  - `rule`
+  - `cross_encoder_local`
+  - `cross_encoder_remote`
+- second-pass 结果并入同一融合框架
+- 增加 retrieval/index version 与自动 FTS 重建
+- retrieval eval 新增：
+  - lexical hit 数
+  - semantic hit 数
+  - fused hit 数
+  - rerank backend / applied
+- 修复了 V4 评审中发现的问题：
+  - 空项目词法检索不再有跨项目泄漏风险
+  - FTS 重建与计数改为只跟踪最新 snapshot
+  - 规则 rerank 改用中文友好的 query terms builder
 
-Completed
-- Added a V3 chat-first agentic runtime behind the existing session/message product model
-- Added internal LangGraph orchestration with bounded chat and research graphs
-- Kept the public route and API families unchanged
-- Added optional `web_browsing` support to message send and stream APIs
-- Added manual `联网补充` composer toggle in project chat
-- Added external web evidence rendering and “save to knowledge” support in the source layer
-- Added session/project memory persistence through `memory_entries`
-- Extended `message_sources` to support:
-  - `source_kind`
-  - nullable `source_id`
-  - `external_uri`
-- Added runtime fallback switch:
-  - `WORKBENCH_AGENT_RUNTIME_VERSION=v3` default
-  - `WORKBENCH_AGENT_RUNTIME_VERSION=v2` legacy fallback
-- Added backend V3 regression coverage for:
-  - web branch disabled behavior
-  - external web evidence path
-  - memory persistence
-  - V2 fallback path
-- Expanded frontend regression coverage for:
-  - `联网补充` toggle
-  - external web source bubble rendering
-  - structured source preview metadata
-- Refreshed Playwright mainline coverage with stable V3-compatible assertions
+默认聊天时延优化
+- 对普通项目内问答，如果没有开启：
+  - `深度调研`
+  - `联网补充`
+  后端会优先走启发式 planner 与启发式 readiness
+- 同时收紧 HyDE 触发，避免简单问题走不必要的 second pass
+- 本地阶段性测试结果：
+  - 简单问题总耗时约从 `36.15s` 降到 `4.50s`
+  - 复杂问题总耗时约从 `45.56s` 降到 `6.44s`
+- 当前主要瓶颈已经变成最终 grounded 回答的 LLM 生成，而不是 SQLite / Qdrant / RRF / 规则 rerank
 
-Verified
-- Backend pytest passed:
-  - `apps/api/.venv/Scripts/python.exe -m pytest tests/backend`
-  - 33 tests passed
-- Frontend typecheck passed:
-  - `corepack pnpm --dir apps/web exec tsc --noEmit`
-- Frontend vitest passed:
-  - `corepack pnpm --dir apps/web test`
-  - 13 tests passed
-- Frontend build passed:
-  - `corepack pnpm --dir apps/web build`
-- Playwright mainline passed:
-  - `corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts`
-  - 6 tests passed
-  - better rerank
-  - richer source preview
-  - tighter in-session streaming experience
-  - clearer model configuration onboarding for weak-source-mode chat
-  - further reduce visual density in the sidebar and message typography if user feedback still points to a Claude/Codex gap
+近期体验改动
+- 项目聊天输入框支持：
+  - `Enter` 发送
+  - `Shift+Enter` 换行
+  - 中文输入法组合输入时不误发送
 
-Known Gaps
-- Retrieval quality is solid but still basic compared with a more advanced semantic chunking + rerank pipeline
-- Embedded Qdrant is validated; remote Qdrant server mode still deserves a separate end-to-end validation pass
-- Session event stream is currently replay-oriented, not token-by-token live generation
-- Legacy `.doc` parsing is still not implemented; the app now surfaces this clearly and supports `.pdf` / `.docx`
+已验证
+- 后端回归通过：
+  - `apps/api/.venv/Scripts/python.exe -m pytest tests/backend -q`
+- V4 关键回归通过：
+  - `.\.venv\Scripts\python -m pytest ..\..\tests\backend\test_vertical_slices.py ..\..\tests\backend\test_retrieval_eval.py ..\..\tests\backend\test_grounded_rag.py ..\..\tests\backend\test_retrieval_v4.py -q`
+  - `35 passed`
+- 前端类型检查通过：
+  - `npm run typecheck`
+- 前后端本地链路可启动：
+  - Web `3000`
+  - API `8010`
 
-V1 Simplifications / Later Improvements
-- Ordinary-question rerank still uses a simple length-plus-keyword rule
-- Conditional HyDE triggering still uses a heuristic v1 policy (`empty / low-score / weak-term-coverage`)
-- Chunking is still basic and should later move to stronger semantic / structural chunking
-- Evidence selection does not yet use a dedicated model-based reranker
-- Grounded generation still uses a pragmatic `structured JSON first + markdown fallback` contract
+当前待继续优化
+- 继续压缩 grounded 最终生成阶段的延迟
+- 继续清理根目录主文档的历史编码与历史命名残留
+- 继续根据真实使用反馈打磨项目聊天页与来源层体验
 
-V2 Roadmap Focus
-- Smarter conditional HyDE triggering beyond today’s heuristic thresholds
-- Better Chinese fuzzy-question retrieval and follow-up question handling
-- Stronger document parsing for tables, headings, and field-like structures
-- Richer evaluation and observability around retrieval hit quality and grounded answer usefulness
-
-Working Rules
-- Update this file after every completed feature slice.
-- Run review-style checks before marking a slice complete.
-- Keep terminology aligned with chat-first docs.
-
-Completed Feature Slice
-- Fixed file-based LLM config so the backend no longer freezes `.env.local` at module import time.
-- Fixed weak-source-mode diagnostics:
-  - direct `LLMService` calls now surface real HTTP/request errors instead of always pretending the model is unconfigured
-  - MiniMax-compatible OpenAI calls were verified through the live API path
-  - `<think>` blocks are stripped from model output before messages are shown
-- Moved the active local API chain to port `8010` and aligned startup defaults:
-  - `scripts/start-api.ps1` now starts the API on `8010`
-  - `apps/web/.env.local` and `apps/web/.env.example` point the frontend at `http://127.0.0.1:8010`
-- Added streaming chat delivery for project conversations:
-  - new backend endpoint: `POST /api/v1/sessions/{session_id}/messages/stream`
-  - weak-source-mode now streams MiniMax-compatible output instead of waiting for a full blocking response
-  - frontend now inserts the user message immediately, shows an assistant shell immediately, and appends streamed deltas in place
-  - final session state is refreshed only after successful stream completion, so failed streams do not erase inline error feedback
-- Fixed markdown rendering for assistant-side message content:
-  - assistant answers, status cards, source update cards, summary cards, and report cards now render `content_md` as real markdown
-  - GFM features such as headings, lists, emphasis, links, blockquotes, and fenced code blocks now display with dedicated chat styles instead of plain text paragraphs
-
-Verified
-- Backend compile check passed:
-  - apps/api/.venv/Scripts/python.exe -m compileall apps/api/app
-- Backend pytest passed:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
-- Direct MiniMax-compatible LLM call passed from apps/api:
-  - `LLMService.is_configured()` returned true
-  - direct `generate_chat_reply(...)` returned a non-empty reply
-- Live weak-source-mode API path passed on the clean `8010` chain:
-  - created project -> created session -> sent message with no sources
-  - assistant message returned from the model instead of the old "未配置模型" fallback
-- Frontend dev server on `3000` is online and paired with the new `8010` API chain
-- Streaming verification passed:
-  - raw MiniMax stream inspected and normalized so `<think>` content is suppressed
-  - HTTP stream now emits `delta` events followed by `done`
-  - browser automation confirmed:
-    - user message appears immediately after click
-    - assistant shell appears before the final answer completes
-    - final answer is rendered without waiting for a full-page blocking refresh
-- Markdown rendering verification passed:
-  - frontend typecheck/build passed after adding markdown dependencies
-  - browser automation confirmed a live answer can render as one `h2` plus two list items inside the chat view
-
-Completed Feature Slice
-- Implemented the V2.1 retrieval foundation:
-  - project retrieval now supports contextual follow-up handling using recent user-message history
-  - low-confidence queries now retry through a two-stage path: contextual rewrite -> field alias expansion -> conditional HyDE
-  - grounded retrieval now records internal diagnostics without changing frontend contracts
-  - grounded/session orchestration now passes conversation history into retrieval
-- Added backend regression coverage for:
-  - contextual follow-up retrieval
-  - field-hit diagnostics
-  - grounded-generation diagnostics handoff
-  - a minimal retrieval evaluation sample set
-
-Verified
-- Backend pytest passed after V2.1 retrieval upgrade:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
-  - 22 tests passed
-
-V2 Roadmap Refinement
-- Absorbed the article-driven roadmap into the project plan:
-  - V2.1: query transformation + adaptive retrieval + conditional HyDE + CRAG-lite
-  - V2.2: semantic chunking + proposition chunking + heading/field enhancement + lightweight hierarchical retrieval
-  - V2.3: contextual compression + relevant segment extraction + stronger evidence selection
-  - V2.4: evaluation, observability, and stability expansion
-- Explicitly deferred from the current V2 mainline:
-  - GraphRAG
-  - Self-RAG
-  - RL-enhanced RAG
-  - full multimodal RAG
-
-Completed Feature Slice
-- Implemented the first V2.2 document-understanding slice:
-  - `source_chunks` now stores structured metadata for `section_type`, `heading_path`, `field_label`, `table_origin`, and reserved `proposition_type`
-  - DOCX ingestion now preserves heading, body, field, and table-row structure before chunk assembly
-  - PDF ingestion now applies lightweight heading/field detection before building chunks
-  - retrieval scoring now considers field labels and heading paths, so field-style questions are less likely to be dominated by generic cover-page hits
-  - source preview now exposes structured chunk metadata to support later UI and debugging work
-- Fixed two ingestion bugs uncovered during this slice:
-  - source chunk insertion had a SQL values/columns mismatch that could fail ingestion
-  - local/test web ingestion now bypasses ambient proxy environment variables via `httpx(..., trust_env=False)`
-
-Verified
-- Backend pytest passed after V2.2 structured chunking slice:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
-  - 24 tests passed
-
-Remaining V2.2 Work
-- proposition chunk generation
-- stronger PDF layout reconstruction
-- lightweight hierarchical retrieval over summary/title blocks
-
-Completed Feature Slice
-- Implemented the second V2.2 retrieval slice:
-  - structured heading/field hits can now drill down into sibling body chunks under the same section
-  - section-style questions are less likely to stop at a bare heading chunk when richer body evidence exists
-  - unscoped field hits are explicitly prevented from dragging unrelated body paragraphs into the result set
-- Added backend regression coverage for:
-  - heading-hit -> body-drill-down retrieval
-  - guarding against unscoped field hits pulling unrelated body chunks
-
-Verified
-- Backend pytest passed after V2.2 lightweight hierarchical retrieval:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
-  - 26 tests passed
-
-Completed Feature Slice
-- Implemented the V2.3 grounded-delivery slice:
-  - source preview metadata is now aligned end-to-end for backend preview summaries, frontend types, and preview UI context rendering
-  - grounded delivery now retrieves a wider internal candidate set and applies a structure-aware selector before building the final 3/5 evidence pack
-  - long body evidence is now compressed into sentence-focused excerpts while preserving the original `source_excerpt` for internal prompt/debug use
-  - grounded delivery now rejects low-confidence second-pass false positives before they can leak into `project_grounded`
-  - grounded prompt assembly now carries structured context (`heading_path`, `field_label`, `proposition_type`) without exposing new public API terminology
-
-Verified
-- Backend pytest passed after V2.3 grounded-delivery upgrade:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend
-  - 29 tests passed
-- Frontend vitest/typecheck/build passed after source-preview contract alignment:
-  - corepack pnpm --dir apps/web test
-  - corepack pnpm --dir apps/web typecheck
-  - corepack pnpm --dir apps/web build
-
-Completed Feature Slice
-- Implemented the V2.4 eval + observability slice:
-  - added `app.services.retrieval_eval_service` with a seeded DOCX fixture and a stable retrieval-eval case set
-  - added `scripts/run_retrieval_eval.py` to run the suite in an isolated local data directory and emit JSON
-  - eval output now records both raw retrieval diagnostics and grounded-delivery diagnostics (`selection` + `compression`)
-  - Playwright coverage now includes:
-    - DOCX import -> grounded question -> Chinese follow-up in the same session
-    - deep-research continuity in the same session flow
-
-Verified
-- Retrieval eval runner passed with all seeded cases:
-  - apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py
-  - 6 / 6 cases passed
-- Playwright E2E passed after V2.4 coverage expansion:
-  - corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts
-  - 6 tests passed
-
-Completed Feature Slice
-- Implemented the V3.1 Phase A runtime-intelligence upgrade:
-  - `AgentOrchestratorService` now records internal graph diagnostics for `plan`, `query_trace`, retry counts, and readiness-check output
-  - pre-answer checking can trigger one bounded `retry_project` pass before final generation when the first evidence pack is still too weak or too generic
-  - planner/checker heuristics now classify factoid / follow-up / summary style questions more explicitly and keep retry behavior bounded
-  - status cards now use stable chat-first copy for project retrieval, refocus, web supplementation, and answer assembly
-
-Verified
-- Backend V3 runtime regression passed after Phase A:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_agentic_v3.py -q
-  - 5 tests passed
-
-Completed Feature Slice
-- Implemented the V3.1 Phase B web-supplement quality upgrade:
-  - `WebResearchService` now normalizes URLs, removes common tracking params, deduplicates external candidates, and cleans weak boilerplate from fetched pages
-  - saving an external page into the knowledge base now reuses the same project source when the page only differs by tracking params or final canonical URL
-  - grounded evidence fusion now keeps project evidence ahead of external-web evidence for normal grounded answers, with web staying as a supplement rather than replacing project truth
-
-Verified
-- Backend web-supplement regression passed after Phase B:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_agentic_v3.py tests/backend/test_grounded_rag.py::test_grounded_generation_keeps_project_evidence_ahead_of_external_web -q
-  - 7 tests passed
-
-Completed Feature Slice
-- Implemented the V3.1 Phase C memory-quality upgrade:
-  - `MemoryService` now filters memory candidates more aggressively so unstable wording and uncertain phrasing are less likely to be persisted
-  - project memory is now written only from project-backed evidence, while external-web evidence stays session-scoped
-  - lookup scoring now prefers recent session memory for contextual follow-up queries and slightly deprioritizes stale entries
-
-Verified
-- Backend memory regression passed after Phase C:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_agentic_v3.py -q
-  - 8 tests passed
-
-Completed Feature Slice
-- Implemented the V3.1 Phase D eval + observability upgrade:
-  - `app.services.retrieval_eval_service` now includes a dedicated agentic eval suite beside the existing retrieval suite
-  - the new agentic cases cover:
-    - project-only grounding
-    - project + web supplement
-    - memory-assisted follow-up
-    - bounded pre-answer retry
-    - project/web conflict with project-priority fusion
-    - weak-source fallback readiness
-  - `scripts/run_retrieval_eval.py` now supports `--suite retrieval|agentic|all`, and `--suite all` emits one combined V3 JSON report
-  - fixed a V3 readiness-check bug where strong external-only evidence could still be misclassified as `insufficient`
-  - stabilized V3 graph regression tests by making retry-path assertions depend on explicit checker stubs instead of ambient LLM behavior
-
-Verified
-- Backend eval + graph regression passed after Phase D:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend/test_retrieval_eval.py tests/backend/test_agentic_v3.py -q
-  - 12 tests passed
-- Combined V3 eval runner passed:
-  - apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all
-  - 13 / 13 cases passed
-
-Completed Feature Slice
-- Implemented the V3.1 Phase E UX + final-delivery slice:
-  - project chat source bubbles now distinguish `项目资料` and `网页补充` while staying inside the existing lightweight source layer
-  - external web evidence can now be manually saved to the knowledge base directly from the source list, with stable duplicate-save guarding and success feedback
-  - Playwright mainline now covers:
-    - DOCX import + structured Chinese follow-up in the same session
-    - manual web supplementation + save to knowledge base + same-session follow-up
-- Final delivery fixes completed during the last review pass:
-  - minimal HTML pages now fall back to a lighter extraction path instead of failing ingestion when the body is short but still meaningful
-  - V3 `chat_graph` now preserves the V2 rule that complex grounded turns still trigger rerank without auto-upgrading to deep research
-  - removed the accidental `apps/web/next-env.d.ts` build-side effect from the delivery diff
-
-Verified
-- Backend full regression passed:
-  - apps/api/.venv/Scripts/python.exe -m pytest tests/backend -q
-  - 40 tests passed
-- Combined V3 eval runner passed after final fixes:
-  - apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all
-  - 13 / 13 cases passed
-- Frontend regression passed:
-  - corepack pnpm --dir apps/web test -- --run
-  - 13 tests passed
-  - corepack pnpm --dir apps/web build
-  - corepack pnpm --dir apps/web typecheck
-  - corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts
-  - 7 Playwright tests passed
+维护规则
+- 每完成一个功能切片，都要更新本文件
+- 标记完成前，先做 review 风格检查
+- 文档术语必须与聊天优先规范保持一致

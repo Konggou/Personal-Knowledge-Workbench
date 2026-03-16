@@ -2,19 +2,19 @@
 
 ## 1. 总体目标
 
-交付一个可直接使用的、本地运行、聊天优先的知识工作台。
+交付一个可直接使用、可本地运行、聊天优先的个人知识工作台。
 
 最终必须满足：
 
 - `工作台 / 会话 / 知识库` 导航可用
 - 项目聊天页是唯一主工作区
-- 资料、来源、问答、调研、摘要卡、报告卡全部在新结构下可用
+- 资料、来源、问答、深度调研、摘要卡、报告卡都能在同一产品叙事下工作
 
-## 2. 绝对不能断的主链
+## 2. 绝对不能断的主闭环
 
 `创建项目 -> 新建会话 -> 增加资料 -> 项目内提问 -> 查看来源`
 
-如果实现压力过大，优先砍外围功能，不砍这条主链。
+如果实现压力过大，优先砍外围能力，不破坏这条主链。
 
 ## 3. 分阶段计划
 
@@ -22,33 +22,33 @@
 
 目标：
 
-- 冻结聊天优先版产品心智
+- 冻结聊天优先产品心智
 
 交付物：
 
-- 更新后的 PRD
-- 更新后的 APP_FLOW
+- 更新后的 `PRD.md`
+- 更新后的 `APP_FLOW.md`
 - 更新后的前后端规范文档
 
 明确不做：
 
-- 保留 task/asset 旧前台叙事
+- 保留旧的 task / asset 前台叙事
 
 完成定义：
 
-- 所有文档统一使用 `项目 / 会话 / 消息 / 来源 / 知识库`
+- 全部主文档统一使用 `项目 / 会话 / 消息 / 知识库 / 来源`
 
 ### Phase 1 - 数据模型重构
 
 目标：
 
-- 把状态中心从 task/asset 语义切换到 session/message 语义
+- 把状态中心从 task / asset 语义切换到 session / message 语义
 
 范围：
 
 - SQLite schema 重构
 - schema version 管理
-- embedded 数据重建机制
+- 本地数据重建机制
 
 交付物：
 
@@ -62,7 +62,7 @@
 
 明确不做：
 
-- 旧数据迁移兼容
+- 旧数据兼容迁移
 
 完成定义：
 
@@ -72,7 +72,7 @@
 
 目标：
 
-- 用新公开对象替换旧 task/search/asset API
+- 用新的公开对象替换旧的 task / search / asset API
 
 范围：
 
@@ -111,7 +111,7 @@
 
 交付物：
 
-- 项目空态
+- 项目空状态
 - 聊天输入区
 - 会话切换
 - 来源气泡
@@ -130,7 +130,7 @@
 
 目标：
 
-- 保住会话内资料可用性
+- 保证项目内资料可稳定检索
 
 范围：
 
@@ -148,7 +148,7 @@
 
 目标：
 
-- 将 grounded 回答从“命中后直接铺检索文本”收口为真正的生成式 RAG 主链
+- 将 grounded 回答从“命中后直接贴检索文本”升级为真正的生成式 RAG 主链
 
 范围：
 
@@ -157,13 +157,13 @@
 - evidence pack 组装
 - LLM 结构化优先回答
 - markdown 降级
-- grounded 与弱资料统一流式体验
+- grounded 与弱资料模式统一流式体验
 
 完成定义：
 
 - 普通 grounded 问答固定只喂 `3` 条最终证据
 - 深度调研固定只喂 `5` 条最终证据
-- 普通复杂问题只触发 rerank，不自动升级深度调研
+- 普通复杂问题只触发 rerank，不自动升级为深度调研
 - 来源气泡只展示最终证据，不展示召回候选
 
 ### Phase 5 - 项目聊天页整体化重构
@@ -174,24 +174,23 @@
 
 范围：
 
-- 删除项目页大型头部
+- 去掉大型项目头部
 - 左侧改为真正的项目树 sidebar
 - 中间聊天区成为主视觉
-- 去除常驻右侧知识库栏
-- 输入区改成底部悬浮贴边
-- 页面改成连续背景 + 轻分隔线
+- 去掉常驻右侧知识库栏
+- 输入区改为底部一体化聊天输入面
 
 完成定义：
 
 - 聊天区明显大于旧版
-- 左侧收起后主区真实变宽
-- 页面不再像几块并排卡片
+- sidebar 收起后主区真实变宽
+- 页面不再像多块并排卡片
 
 ### Phase 6 - 自动化验证与真实可用性
 
 目标：
 
-- 确保主链和核心视觉改动都可回归
+- 确保主闭环和核心视觉改动都可回归
 
 范围：
 
@@ -202,7 +201,7 @@
 
 完成定义：
 
-- 主链自动化回归全绿
+- 主闭环自动化回归完整可用
 
 ## 4. 测试策略
 
@@ -215,7 +214,7 @@
 
 - 创建项目
 - 新建会话
-- 会话内添加资料
+- 会话内增加资料
 - 项目内提问
 - 来源气泡展开与预览
 - 保存摘要卡
@@ -224,21 +223,21 @@
 
 ## 5. 可后置项
 
-如果实现压力过大，优先后置：
+如果实现压力过大，可优先后置：
 
 - 更强的语义切块
 - 更强的 rerank
 - 更丰富的来源预览
-- token 级流式输出
-- 独立远程 Qdrant 验证
+- 更细粒度的流式输出
+- 远程 Qdrant 独立验证
 
-## 6. v1 简化 / 后续优化
+## 6. v1 简化与后续优化
 
-- 普通问答 rerank 仅按问题长度与关键词触发
-- 条件 HyDE 目前仅在“首轮检索为空 / 分数偏低 / 关键词覆盖偏弱”时按启发式规则触发，后续可升级为更智能的判定逻辑
-- 当前 chunking 仍偏基础，后续可升级为更强的语义/结构化切块
-- 当前 evidence selection 仍未引入独立模型 rerank
-- 当前 grounded 输出采用“结构化 JSON 优先 + markdown 降级”
+- 普通问答 rerank 最初只按问题长度与关键词触发
+- 条件 HyDE 最初是启发式策略，后续再升级
+- chunking 初期偏基础，后续再增强语义与结构感知
+- evidence selection 初期不强依赖专门模型
+- grounded 输出优先结构化，失败时回退 markdown
 
 ## 7. 当前阶段判断
 
@@ -246,218 +245,95 @@
 
 - 聊天优先主链可用
 - 项目页整体化聊天界面已落地
-- 文档已同步到新布局
-- 自动化验证已覆盖主链
+- 文档已同步到聊天优先产品结构
+- 自动化验证覆盖主链
 
-## 8. V2 升级路线图
+## 8. V2 路线
 
 高优先级：
 
-- 升级条件 HyDE 触发逻辑：从当前 v1 启发式规则，逐步过渡到结合真实问句、命中特征和低成本判定器的更智能策略
-- 强化中文模糊问法召回：优化代词追问、上下文承接式问题、字段型问法（如题目 / 课题名称 / 项目名称）
-- 升级文档切块与字段提取：进一步提升 DOCX / PDF 的标题层级、表格、字段名、章节结构利用率
-- 提升 grounded 输出稳定性：继续加强 markdown 列表归一化和 prompt 约束，减少“伪分点挤在一段里”的回答
+- 升级 HyDE 触发逻辑，从简单启发式走向更稳的判定策略
+- 强化中文模糊问法、追问、代词承接检索
+- 升级 DOCX / PDF 结构化切块与字段抽取
+- 提升 grounded 输出稳定性与可读性
 
 中优先级：
 
-- 引入更强的 evidence selection / rerank 机制，而不只依赖当前规则法
-- 建立真实问答评测集，记录是否命中资料、是否触发 HyDE、最终答案是否可用
-- 优化来源层与长回答体验，包括多来源折叠、长文滚动可读性、来源预览衔接
+- 引入更强的 evidence selection / rerank
+- 建立真实问答评测集
+- 优化来源层与长回答体验
 
 可延后：
 
-- 进一步打磨项目聊天页视觉层级和轻提示样式
-- 补更多 Playwright 端到端覆盖，尤其是长对话、复杂 grounded、弱资料连续对话场景
+- 继续打磨项目聊天页的视觉层级
+- 增补更长链路的 Playwright 覆盖
 
-## 9. V2.1 已落地与 V2 映射
+## 9. V2.1 已落地与映射
 
 ### V2.1 已落地
 
-- grounded 检索主链已经升级为两段式策略：
-  - 首轮：现有混合检索
-  - 次轮：上下文改写 / 字段别名扩展 / 条件 HyDE
-- 检索现在会使用最近几轮用户消息作为上下文线索，优先改善中文模糊追问与代词承接问题。
-- 后端内部已新增 `retrieval_diagnostics`，至少记录：
-  - 首轮是否低命中
-  - 是否触发上下文改写
-  - 是否触发 HyDE
-  - 最终命中来源数
-  - 最终是否成为 grounded candidate
-- 当前实现保持公开 API 与前台术语不变，不向前端暴露 HyDE、diagnostics、evidence pack 等内部概念。
+- grounded 检索升级为两段式：
+  - 首轮混合检索
+  - 次轮上下文改写 / 字段别名扩展 / 条件 HyDE
+- 检索会使用最近几轮用户消息作为上下文线索
+- 后端新增 `retrieval_diagnostics`
+- 保持公开 API 与前台术语不变
 
-### 吸收文章后的 V2 映射
+### V2 映射
 
 - V2.1：
   - 查询转换
   - 自适应检索
   - 条件 HyDE
-  - CRAG-lite（仅做检索质量判断与补救）
+  - CRAG-lite
 - V2.2：
-  - 语义分块
-  - 命题分块
-  - 上下文标题增强
-  - 轻量分层检索
+  - 语义切块
+  - 命题切块
+  - 标题 / 字段增强
+  - 轻量层级检索
 - V2.3：
   - 上下文压缩
   - 相关段落提取
-  - 更强 evidence selection / rerank
+  - 更强的 evidence selection / rerank
 - V2.4：
   - 最小评测集
-  - 检索与生成链路内部观测
-  - 基于评测结果决定是否进入文档增强 RAG 或更强 judge
+  - 检索与生成链路可观测性
 
-### 暂不进入当前 V2 主路径
+### 暂不进入当前 V2 主线
 
 - GraphRAG
 - Self-RAG
 - RL 增强 RAG
 - 完整多模态 RAG
-## 10. V2.2 First Slice - Structured Chunking
 
-- Scope completed in this slice:
-  - structured chunk metadata added to `source_chunks`
-  - DOCX ingestion now preserves heading / paragraph / table-row / field structure
-  - PDF ingestion now applies lightweight heading and field detection before chunk assembly
+## 10. V3 聊天优先 Agent 运行时升级
 
-## 13. V3 Chat-First Agentic Upgrade
+- V3 保持公开产品心智不变：
+  - 项目
+  - 会话
+  - 消息
+  - 知识库
+  - 来源
+  - 深度调研
+- LangGraph 仅作为内部编排层
+- 所有消息发送默认进入有界图运行时
+- `联网补充` 是手动按次开启，不是自动升级
+- 支持会话记忆与项目记忆
+- 外部网页证据与项目资料证据分离管理
+- 保留 `WORKBENCH_AGENT_RUNTIME_VERSION=v2` 回退路径
 
-- V3 keeps the public product mental model unchanged:
-  - project
-  - session
-  - message
-  - knowledge
-  - source
-  - deep research
-- LangGraph is now used as an internal orchestration layer only.
-- All message sends now enter a graph-backed runtime with a version switch:
-  - `v3` default: graph orchestration enabled
-  - `v2` fallback: legacy direct session flow
-- The V3 graph is intentionally bounded and does not expose agent-platform concepts in the UI:
-  - `chat_graph`
-  - `research_graph`
-  - no unbounded tool loop
-  - no public reasoning trace
-- New internal V3 capabilities completed:
-  - project retrieval remains the primary evidence source
-  - optional manual web supplementation via `web_browsing`
-  - session memory and project memory persistence
-  - pre-answer readiness checking before final generation
-  - project-source and external-web evidence can coexist in the final source layer
-- Public API surface stayed stable:
-  - existing route families unchanged
-  - `POST /api/v1/sessions/{session_id}/messages`
-  - `POST /api/v1/sessions/{session_id}/messages/stream`
-  - only one new optional request field added: `web_browsing`
-- Frontend V3 completion:
-  - composer now includes a manual `联网补充` toggle beside `深度调研`
-  - source bubble can render both project evidence and external web evidence
-  - external web evidence can be manually saved into the knowledge base
-- Backend V3 completion:
-  - `AgentOrchestratorService`
-  - `MemoryService`
-  - `WebResearchService`
-  - `memory_entries` persistence
-  - `message_sources.source_kind`
-  - `message_sources.external_uri`
-  - bounded `retry_project` recovery before final generation
-  - richer internal graph diagnostics (`plan`, `query_trace`, `pre_answer_check`)
-  - canonical-URL based web-source dedupe before saving to the knowledge base
-  - cleaned web fetch/extract pipeline with URL normalization, de-duplication, and lighter boilerplate removal
-  - memory extraction now keeps project memory restricted to project-backed evidence while allowing session memory to carry short-lived external context
-  - contextual follow-up queries now prefer recent session memory before longer-lived project memory
-- V3 regression coverage now includes:
-  - graph runtime fallback to V2
-  - web branch disabled / enabled behavior
-  - memory persistence after successful grounded answers
-  - bounded project-evidence retry when the first grounded pack is still too weak
-  - re-saving the same external page with tracking params now reuses the same project source
-  - normal grounded delivery keeps project evidence ahead of supplemental web evidence
-  - external-only grounded turns do not leak into project memory
-  - contextual follow-up memory lookup prefers session scope
-  - deterministic agentic eval coverage for:
-    - project-only grounding
-    - project + web supplement
-    - memory-assisted follow-up
-    - bounded pre-check retry
-    - project/web conflict with project priority
-    - weak-source fallback readiness
-  - frontend composer toggle behavior
-  - mixed project/web source rendering
-  - retrieval scoring now considers `section_type`, `heading_path`, `field_label`, and `table_origin`
-  - source preview now exposes structured chunk metadata for backend/frontend use
-- Metadata added for this slice:
-  - `section_type`
-  - `heading_path`
-  - `field_label`
-  - `table_origin`
-  - `proposition_type` (reserved for later proposition-level work)
-- Still deferred inside V2.2:
-  - proposition chunk generation
-  - richer hierarchical retrieval over chapter summaries
-  - stronger PDF layout reconstruction
-  - schema-preserving migrations for old local state
+## 11. V4 检索升级方向
 
-## 11. V2.2 Second Slice - Lightweight Hierarchical Retrieval
-
-- Scope completed in this slice:
-  - project retrieval now performs lightweight structured drill-down after heading/field hits
-  - heading hits can expand into sibling body chunks under the same `heading_path`
-  - field hits only expand into body chunks when the field is already scoped by a heading path
-  - this keeps field answers precise while letting section-style questions retrieve richer body detail
-- Current design boundaries:
-  - no new public API fields
-  - no frontend terminology changes
-  - no full chapter-summary retrieval layer yet
-- Still deferred after this slice:
-  - proposition-level retrieval
-  - richer summary-block / chapter-block hierarchy
-  - stronger PDF structural reconstruction
-
-## 12. V2.3 Slice - Contextual Compression And Evidence Selection
-
-- Scope completed in this slice:
-  - grounded delivery now retrieves a wider candidate set internally before selecting the final evidence budget
-  - a selector layer now ranks field / proposition / heading / body candidates before the final 3-or-5 evidence pack is assembled
-  - body chunks now pass through sentence-focused compression so long paragraphs no longer reach the grounded prompt unchanged
-  - evidence-pack assembly now preserves `source_excerpt` while feeding a shorter `excerpt` to the grounded generation prompt
-  - grounded delivery now rejects low-confidence second-pass false positives before they can leak into `project_grounded`
-- Current design boundaries:
-  - no new public API fields
-  - no frontend terminology changes
-  - no automatic upgrade from ordinary grounded Q&A to deep research
-
-## 13. V2.4 Slice - Retrieval Eval And Delivery Observability
-
-- Scope completed in this slice:
-  - added a reusable retrieval evaluation service with a seeded DOCX fixture and a stable case set
-  - added `scripts/run_retrieval_eval.py` to run the eval suite in an isolated local data directory and print JSON
-  - eval output now records both retrieval diagnostics and grounded-delivery diagnostics (`selection` + `compression`)
-  - source preview metadata is now aligned end-to-end for backend summaries, frontend types, and preview UI context rendering
-  - Playwright coverage now includes DOCX import + grounded follow-up and deep-research continuity in the same session
-- Current design boundaries:
-  - eval output is for local/dev use and is not exposed through public API routes
-  - observability stays file/CLI driven rather than becoming a production monitoring surface
-- V3.1 Phase D extends the same eval surface rather than inventing a second observability stack:
-  - `run_retrieval_eval` keeps the structured retrieval/delivery cases
-  - `run_agentic_eval` adds graph/web/memory/pre-check cases with deterministic heuristic gating
-  - `run_v3_eval` combines both suites for one local comparison run
-  - the readiness checker now accepts sufficiently strong external-only evidence when project retrieval is empty
-
-## 14. V3.1 Phase E - UX Polish And Final Delivery
-
-- Scope completed in this slice:
-  - chat source bubbles now distinguish `项目资料` and `网页补充` while preserving the existing lightweight source mental model
-  - external web evidence can be saved into the knowledge base directly from the source list, with stable in-chat success feedback and duplicate-save guarding
-  - Playwright mainline now covers:
-    - DOCX import plus structured Chinese follow-up in the same session
-    - manual web supplementation, saving the external page, and continuing the same session
-- Final delivery fixes completed during this slice:
-  - simple/minimal HTML pages now fall back to a lighter text extraction path instead of failing ingestion when the body is short but still meaningful
-  - V3 `chat_graph` now preserves the V2 rule that complex grounded questions still trigger rerank even without deep research
-- Final validation baseline:
-  - `apps/api/.venv/Scripts/python.exe -m pytest tests/backend -q`
-  - `apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all`
-  - `corepack pnpm --dir apps/web test -- --run`
-  - `corepack pnpm --dir apps/web build`
-  - `corepack pnpm --dir apps/web typecheck`
-  - `corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts`
+- 使用真实的 SQLite `FTS5 + bm25`
+- 使用 Qdrant 进行语义召回
+- 使用 `RRF` 融合两路结果
+- 引入独立 reranker：
+  - `rule`
+  - `cross_encoder_local`
+  - `cross_encoder_remote`
+- 增加 retrieval index version 与自动重建
+- 增强 retrieval eval 指标
+- 默认网页聊天路径优先低延迟：
+  - 非 `深度调研`
+  - 非 `联网补充`
+  的项目内提问尽量避免多余 LLM 调用

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -377,6 +377,14 @@ export function ProjectChatClient({
     } finally {
       setIsStreamingMessage(false);
     }
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+      return;
+    }
+    event.preventDefault();
+    void handleSendMessage();
   }
 
   async function handleSaveSummary() {
@@ -768,6 +776,7 @@ export function ProjectChatClient({
 
                     <textarea
                       onChange={(event) => setMessage(event.target.value)}
+                      onKeyDown={handleComposerKeyDown}
                       placeholder="继续在这个项目里提问……"
                       rows={2}
                       value={message}

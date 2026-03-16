@@ -1,32 +1,27 @@
-# Personal Knowledge Workbench
+# 个人知识工作台
 
-一个面向单用户、本地运行、聊天优先的个人知识工作台。
+这是一个面向单用户、本地运行、聊天优先的个人知识工作台。
 
-它的核心心智是：
+核心心智是：
 
-- `项目` 是知识库容器
+- `项目` 是知识容器
 - `会话` 是项目内对话线程
 - `消息` 是主要交互单元
 - `来源` 是回答底部可展开的轻量证据层
 - `知识库` 负责统一管理网页和文件资料
 
-这不是一个通用聊天壳，也不是多人协作平台。它的目标是让你围绕自己的资料进行问答、调研和结果沉淀。
+它不是通用聊天壳，也不是多人协作平台。它的目标是让你围绕自己的资料完成提问、调研、沉淀和回看。
 
 ## 当前状态
 
-当前仓库已经完成 v1 的聊天优先重构，主链可用并带自动化验证：
+当前仓库已经完成聊天优先主链，能够稳定覆盖：
 
 - 创建项目
 - 在项目里新建会话
-- 从会话内或知识库页添加网页 / PDF / DOCX
+- 从会话内或知识库添加网页 / PDF / DOCX
 - 在同一会话里提问
 - 查看来源气泡并打开来源预览
-- 在同一会话里保存摘要卡、生成报告卡
-
-当前项目名称建议统一写作：
-
-- 中文：`个人知识工作台`
-- 英文：`Personal Knowledge Workbench`
+- 在会话里保存摘要卡、生成报告卡
 
 ## 页面结构
 
@@ -40,23 +35,23 @@
 
 页面职责：
 
-- `工作台`：按项目聚合入口，创建项目并回到最近活跃项目
+- `工作台`：创建项目、浏览最近活跃项目
 - `会话`：按项目分组浏览最近会话
-- `知识库`：按项目分组管理资料、搜索资料、预览来源、进入聊天
-- `项目聊天页`：顶部轻导航、左侧项目树 sidebar、中间主聊天界面
+- `知识库`：按项目分组管理资料、搜索资料、预览来源
+- `项目聊天页`：顶部轻导航、左侧项目树、中央聊天主区
 
 ## 主要能力
 
 ### 项目与会话
 
-- 新项目创建后直接进入项目空态页
+- 新项目创建后直接进入项目页
 - 项目页不会自动打开最近会话
 - 会话标题由首条用户消息自动生成
 - 会话支持重命名和删除
 
 ### 知识库与资料
 
-支持两类导入路径：
+支持两类添加路径：
 
 - 在聊天输入区通过 `增加资料`
 - 在 `知识库` 页面按项目添加资料
@@ -70,17 +65,18 @@
 支持的资料动作：
 
 - 预览
-- 改链接（网页）
-- 刷新（网页）
+- 改链接
+- 刷新
 - 归档
 - 恢复
 - 删除
 
 ### 问答与调研
 
-- 默认是项目内问答
-- 没有资料时允许进入 `弱资料模式`
-- 可切换 `深度调研`，但仍留在同一会话
+- 默认是项目内 grounded 问答
+- 没有资料时允许进入弱资料模式继续对话
+- 可按次开启 `深度调研`
+- 可按次开启 `联网补充`
 - 回答底部显示来源气泡
 
 ### 结果沉淀
@@ -98,23 +94,22 @@
 - `TypeScript 5.9.3`
 - `@tanstack/react-query 5.90.21`
 - `zustand 5.0.11`
-- `Radix UI` 部分基础组件
 
 ### 后端
 
 - `Python 3.12`
-- `FastAPI 0.135.1`
-- `Pydantic 2.12.5`
-- `Uvicorn 0.41.0`
+- `FastAPI`
+- `Pydantic`
+- `Uvicorn`
 
 ### 检索与数据
 
 - `SQLite`：结构化状态中心
-- `Qdrant`：向量检索
-- `sentence-transformers 5.2.3`：embedding
-- `SQLite FTS + Qdrant`：混合检索
+- `Qdrant`：默认向量检索后端
+- `sentence-transformers`：embedding
+- `SQLite FTS5 + Qdrant`：混合检索
 
-默认使用 embedded Qdrant，不需要你先额外安装独立 Qdrant 服务。
+当前默认使用 embedded Qdrant，不需要额外启动独立服务。
 
 ## 启动方式
 
@@ -149,7 +144,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 启动后访问：
 
 - Web: [http://127.0.0.1:3000](http://127.0.0.1:3000)
-- API Health: [http://127.0.0.1:8010/api/v1/health](http://127.0.0.1:8010/api/v1/health)
+- API 健康检查: [http://127.0.0.1:8010/api/v1/health](http://127.0.0.1:8010/api/v1/health)
 
 ## 测试与验证
 
@@ -192,7 +187,7 @@ agentic_rag/
 
 ## 规范文档
 
-如果你要继续开发，建议按这个顺序读：
+建议按下面顺序阅读：
 
 1. [AGENTS.md](/Users/user/Desktop/agentic_rag/AGENTS.md)
 2. [PRD.md](/Users/user/Desktop/agentic_rag/PRD.md)
@@ -204,84 +199,22 @@ agentic_rag/
 
 ## 开发说明
 
-- 这个仓库当前以“聊天优先”作为产品真相
-- 不要重新引入旧的 `/tasks`、`/search`、`/assets` 页面心智
-- 前台术语应优先使用：`项目 / 会话 / 消息 / 知识库 / 来源`
+- 产品真相是“聊天优先”，不要把它重新做回 task-first 工作台
+- 不要重新引入旧的 `/tasks`、`/search`、`/assets` 心智
+- 前台主术语统一使用：`项目 / 会话 / 消息 / 知识库 / 来源`
 
-## V2 方向
+## V4 检索说明
 
-后续升级优先聚焦于：
+当前主检索链路已经升级为：
 
-- 更智能的条件 HyDE 触发与中文模糊问法召回
-- 更强的 DOCX / PDF 结构化切块与字段提取
-- 更稳定的 grounded markdown 输出与列表格式归一化
-- 更完善的真实问答评测与端到端回归
+- SQLite `FTS5 + bm25`
+- Qdrant 语义检索
+- `RRF` 融合
+- 有界 rerank
 
-当前仓库已经落地到：
+默认网页聊天场景下，如果本次提问没有开启：
 
-- V2.1：上下文改写 / 字段别名扩展 / 条件 HyDE / retrieval diagnostics
-- V2.2：structured chunking / proposition chunks / lightweight hierarchical retrieval
-- V2.3：evidence selection / contextual compression / low-confidence grounded gating
-- V2.4：retrieval eval runner / delivery diagnostics / expanded Playwright coverage
+- `深度调研`
+- `联网补充`
 
-## V2 Detailed Direction
-
-The current V2 mainline is intentionally focused on high-yield retrieval and answer-quality work:
-
-- V2.1:
-  - query transformation
-  - adaptive retrieval
-  - contextual follow-up handling
-  - conditional HyDE
-  - CRAG-lite style retrieval repair
-- V2.2:
-  - semantic chunking
-  - proposition chunking
-  - heading / field-aware metadata
-  - lightweight hierarchical retrieval
-- V2.3:
-  - contextual compression before generation
-  - relevant segment extraction
-  - stronger evidence selection and rerank
-- V2.4:
-  - evaluation dataset
-  - retrieval / generation observability
-  - stability-focused end-to-end regression expansion
-
-Not in the current V2 mainline:
-
-- GraphRAG
-- Self-RAG
-- RL-enhanced RAG
-- full multimodal RAG
-
-## V3 Runtime
-
-V3 upgrades the backend into a chat-first agentic runtime while keeping the public product language unchanged.
-
-- Internal orchestration now uses `LangGraph`
-- All message sends enter a bounded graph runtime by default
-- Project retrieval is still the primary evidence source
-- `联网补充` is a manual per-turn option, not an automatic escalation
-- Session memory and project memory are stored internally and reused on later turns
-- External web evidence is kept separate from project knowledge until the user explicitly saves it
-- The legacy V2 flow is still available via `WORKBENCH_AGENT_RUNTIME_VERSION=v2`
-
-V3 does not turn the product into a public agent platform:
-
-- no public tool panel
-- no reasoning trace
-- no LangGraph terminology in the frontend
-
-## V3 Verification
-
-```powershell
-apps/api/.venv/Scripts/python.exe -m pytest tests/backend -q
-apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all
-corepack pnpm --dir apps/web test -- --run
-corepack pnpm --dir apps/web build
-corepack pnpm --dir apps/web typecheck
-corepack pnpm --dir apps/web exec playwright test e2e/project-workspace.spec.ts
-```
-
-`apps/web` 的 `typecheck` 依赖 Next 生成的 `.next/types`，因此应在至少一次 `build` 之后执行。
+后端会优先走更轻的启发式 planner / readiness 路径，以降低默认聊天延迟。

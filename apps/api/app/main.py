@@ -6,12 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.database import initialize_database
 from app.core.settings import get_settings
+from app.repositories.search_repository import SearchRepository
 from app.services.vector_store import VectorStore
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     initialize_database()
+    try:
+        SearchRepository().ensure_retrieval_index()
+    except Exception:
+        pass
     try:
         VectorStore().ensure_collection()
     except Exception:

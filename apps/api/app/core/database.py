@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app.core.settings import get_settings
 
-SCHEMA_VERSION = "chat_first_agentic_v3_langgraph_memory"
+SCHEMA_VERSION = "chat_first_agentic_v4_rrf_cross_encoder"
 
 
 def _load_schema(schema_path: Path) -> str:

@@ -1,10 +1,10 @@
-# Personal Knowledge Workbench v1 - App Flow
+# 个人知识工作台 v1 使用流程
 
-## 1. Purpose
+## 1. 目的
 
-This document defines the chat-first v1 user flow.
+本文定义聊天优先 v1 的用户主流程。
 
-Public routes:
+公开路由：
 
 - `/workspace`
 - `/sessions`
@@ -12,307 +12,291 @@ Public routes:
 - `/projects/[projectId]`
 - `/projects/[projectId]?sessionId=...`
 
-Removed routes:
+已移除路由：
 
 - `/tasks`
 - `/search`
 - `/assets`
-- dedicated task-detail pages
+- 独立 task 详情页
 
-## 2. Screen List
+## 2. 页面清单
 
 ### 2.1 `/workspace`
 
-Purpose:
+用途：
 
-- create a new project
-- reopen a recent project
-- search projects by name
-
-What the user sees:
-
-- a create-project block
-- a recent-project list
+- 创建新项目
+- 打开最近使用的项目
+- 按名称搜索项目
 
 ### 2.2 `/sessions`
 
-Purpose:
+用途：
 
-- browse recent sessions across all projects
-
-What the user sees:
-
-- sessions grouped by project
-- open, rename, and delete actions
+- 按项目分组浏览会话
+- 进入某个项目内的具体会话
+- 重命名或删除会话
 
 ### 2.3 `/knowledge`
 
-Purpose:
+用途：
 
-- manage sources across projects
-- search sources
-- preview a source before entering chat
-
-What the user sees:
-
-- search input
-- project filter
-- source groups by project
-- a preview panel
+- 按项目分组浏览资料
+- 搜索资料
+- 预览资料
+- 从资料管理进入聊天
 
 ### 2.4 `/projects/[projectId]`
 
-Purpose:
+用途：
 
-- main project chat screen
-
-What the user sees:
-
-- a light top navigation
-- a left project-tree sidebar
-- a dominant center chat area
-- no permanent right knowledge column
+- 项目空状态页
+- 项目知识与会话的主入口
+- 未指定 `sessionId` 时不自动打开会话
 
 ### 2.5 `/projects/[projectId]?sessionId=...`
 
-Purpose:
+用途：
 
-- open one specific session inside the project chat screen
+- 在项目聊天页中打开某个具体会话
 
-## 3. Primary Navigation Rules
+## 3. 全局规则
 
-- `Workspace` is the only project entry page.
-- `Sessions` is a global browsing page, not the main work surface.
-- `Knowledge` owns source search and source management.
-- Active work always happens inside `/projects/[projectId]`.
-- A project page without `sessionId` must not auto-open an existing session.
+- `工作台` 是唯一项目入口页
+- `会话` 是全局浏览页，不是主工作面
+- `知识库` 负责资料管理，不取代项目聊天页
+- 项目聊天页是主工作面
+- 用户在项目内工作，而不是在 task 详情页里工作
 
-## 4. Flow 1 - First Open
+## 4. 流程 1：打开应用
 
-Trigger:
+触发：
 
-- the user opens the app
+- 用户打开应用
 
-Sequence:
+系统行为：
 
-1. `/` redirects to `/workspace`
-2. the user sees the create-project block
-3. if no projects exist, the project list is empty
+1. 默认进入 `/workspace`
+2. 显示创建项目入口
+3. 如果没有项目，项目列表为空
+4. 如果已有项目，展示最近活跃项目列表
 
-Success result:
+用户看到的结果：
 
-- the user understands that work starts by creating or opening a project
+- 用户知道工作从“创建项目”或“打开项目”开始
 
-Error result:
+失败与边界：
 
-- if project loading fails, keep the create-project path visible and show retry guidance
+- 如果项目加载失败，保留创建项目入口并显示重试提示
 
-## 5. Flow 2 - Create Project
+## 5. 流程 2：创建项目
 
-Trigger:
+触发：
 
-- user submits the create-project form on `/workspace`
+- 用户在 `/workspace` 提交创建项目表单
 
-Sequence:
+系统行为：
 
-1. user enters project name
-2. user enters one-line description
-3. user submits
-4. the system creates the project
-5. the app navigates to `/projects/[projectId]`
-6. the project opens in empty-state mode
+1. 校验名称和描述
+2. 创建项目
+3. 跳转到 `/projects/[projectId]`
+4. 以项目空状态打开
 
-Success result:
+用户看到的结果：
 
-- the user lands on the project page with no session selected
+- 用户进入项目页，但还没有自动打开任何会话
 
-Error result:
+失败与边界：
 
-- inline validation error if the name or description is blank
-- keep entered values on failure
+- 如果名称或描述为空，显示行内校验错误
+- 如果创建失败，保留表单内容并给出重试提示
 
-## 6. Flow 3 - Project Empty State
+## 6. 流程 3：进入项目空状态
 
-Trigger:
+触发：
 
-- the user enters `/projects/[projectId]` with no `sessionId`
+- 用户进入 `/projects/[projectId]` 且没有 `sessionId`
 
-Sequence:
+系统行为：
 
-1. the left sidebar loads all projects as a tree
-2. the current project is expanded by default
-3. the center area does not auto-open any session
-4. the center area shows a project empty state
-5. the empty state shows:
-   - `New Session`
-   - `Go to Knowledge`
+1. 左侧 sidebar 加载项目树
+2. 当前项目默认展开
+3. 中间区域不自动打开任何会话
+4. 中间区域显示项目空状态
+5. 空状态至少提供：
+   - 新建会话
+   - 前往知识库
 
-Success result:
+用户看到的结果：
 
-- the user clearly chooses whether to start a conversation or manage knowledge first
+- 用户明确决定先开始对话，还是先管理资料
 
-Error result:
+失败与边界：
 
-- if the project does not exist, show not-found
+- 如果项目不存在，显示 not found
 
-## 7. Flow 4 - Create Session
+## 7. 流程 4：新建会话
 
-Trigger:
+触发：
 
-- user clicks `New Session`
+- 用户在项目页点击“新建会话”
 
-Sequence:
+系统行为：
 
-1. the system creates a session under the current project
-2. the app navigates to `/projects/[projectId]?sessionId=...`
-3. the chat composer becomes visible
-4. if the project has no indexed sources, weak-source mode is shown
+1. 在当前项目下创建会话
+2. 跳转到 `/projects/[projectId]?sessionId=...`
+3. 显示聊天输入区
+4. 如果当前项目还没有可检索资料，显示弱资料模式提示
 
-Success result:
+用户看到的结果：
 
-- the user can start chatting immediately
+- 用户可以立刻开始聊天
 
-Error result:
+失败与边界：
 
-- if session creation fails, stay on the project page and show retry guidance
+- 如果会话创建失败，停留在项目页并显示重试提示
 
-## 8. Flow 5 - Add Source Inside Chat
+## 8. 流程 5：在会话内添加资料
 
-Trigger:
+触发：
 
-- user clicks `Add Source` in the composer area
+- 用户在聊天输入区点击 `增加资料`
 
-Sequence:
+系统行为：
 
-1. a tiny menu opens
-2. the menu offers:
-   - `Add File`
-   - `Add Web Link`
-3. if the user selects file upload, a file picker opens
-4. if the user selects web link, a small inline URL form opens above the composer
-5. after a successful import:
-   - the current project source list is updated
-   - a lightweight `source update` system card is inserted into the same session
+1. 打开轻量菜单
+2. 菜单提供：
+   - 添加文件
+   - 添加网页链接
+3. 选择文件时打开文件选择器
+4. 选择网页时在输入区上方打开轻量 URL 表单
+5. 导入成功后：
+   - 当前项目来源列表更新
+   - 同一会话中插入一条 `source update` 系统卡片
 
-Success result:
+用户看到的结果：
 
-- the source becomes available to retrieval without leaving the chat thread
+- 资料进入当前项目
+- 用户无需离开会话即可继续追问新资料
 
-Error result:
+失败与边界：
 
-- unsupported file type shows validation error
-- ingestion failure is surfaced to the user
+- 入库失败时要明确暴露给用户
 
-## 9. Flow 6 - Ask in the Same Session
+## 9. 流程 6：在同一会话里提问
 
-Trigger:
+触发：
 
-- user sends a normal chat message
+- 用户在项目会话中输入并发送问题
 
-Sequence:
+系统行为：
 
-1. the system appends the user message
-2. if this is the first user message, the session title is auto-generated
-3. the system runs retrieval against the current project knowledge
-4. if evidence is found, the system builds a grounded answer from a small final evidence set instead of pasting raw retrieval text
-5. the assistant shell appears immediately and the answer streams into the same message
-6. when the answer completes, the footer mounts the final source bubble
-7. if no evidence is found, source mode falls back to `weak_source_mode` and the chat still streams normally
+1. 追加用户消息
+2. 如果这是首条用户消息，自动生成会话标题
+3. 对当前项目知识执行检索
+4. 如果有证据，基于小规模最终证据集生成 grounded 回答
+5. 助手消息壳先出现，随后流式写入回答
+6. 回答完成后在底部挂载最终来源气泡
+7. 如果没有项目证据，则切换到 `weak_source_mode`，但仍保持正常对话流
 
-Success result:
+用户看到的结果：
 
-- the answer appears in the same conversation
-- the session title becomes meaningful after the first user message
+- 回答出现在同一条对话流里
+- 第一条用户消息后，会话标题变得有意义
+- 可以继续追问，不会跳到其他页面
 
-Error result:
+失败与边界：
 
-- if answering fails, keep the user message visible and show an assistant-side failure state
+- 如果回答失败，保留用户消息，并显示助手侧失败状态
 
-## 10. Flow 7 - Ask Upgrades to Deep Research
+## 10. 流程 7：开启深度调研
 
-Trigger:
+触发：
 
-- user toggles `Deep Research` before sending
+- 用户在发送前手动打开 `深度调研`
 
-Sequence:
+系统行为：
 
-1. the user stays in the same session
-2. the system inserts lightweight status cards, such as:
-   - `Researching`
-   - `Research complete`
-3. retrieval uses a deeper evidence-selection path for this turn
-4. the final answer is still streamed into the same message flow
+1. 用户仍停留在同一会话
+2. 系统插入轻量状态卡，例如：
+   - `调研中`
+   - `调研完成`
+3. 本轮会走更深的证据选择与回答路径
+4. 最终回答仍流式进入同一条消息流
 
-Success result:
+用户看到的结果：
 
-- the session feels continuous even when the work becomes more complex
+- 会话是连续的，即使问题更复杂也不跳出当前线程
 
-Error result:
+失败与边界：
 
-- if research fails, the conversation still stays in the same session and shows a recoverable failure message
+- 如果调研失败，也必须留在同一会话并给出可恢复的失败提示
 
-## 11. Flow 8 - View Sources
+## 11. 流程 8：查看来源
 
-Trigger:
+触发：
 
-- user clicks the source bubble under an assistant answer
+- 用户点击某条助手回答下方的来源气泡
 
-Sequence:
+系统行为：
 
-1. the message expands a lightweight source-title list
-2. only titles are shown at first
-3. user clicks one title
-4. a detailed source preview opens as an overlay panel
+1. 先展开轻量的来源标题列表
+2. 再点击某个来源标题时
+3. 打开覆盖式来源预览面板
 
-Success result:
+用户看到的结果：
 
-- the user can inspect evidence without leaving the conversation
+- 用户可以在不离开会话的前提下检查证据
 
-Error result:
+失败与边界：
 
-- if preview loading fails, keep the message context and show a retry action
+- 如果预览加载失败，保留当前消息上下文并显示重试入口
 
-## 12. Flow 9 - Save Summary and Generate Report
+## 12. 流程 9：保存为摘要或生成报告
 
-Trigger:
+触发：
 
-- user clicks `Save as Summary`
-- or clicks `Generate Report`
+- 用户在当前会话里点击：
+  - `保存为摘要`
+  - `生成报告`
 
-Sequence:
+系统行为：
 
-1. the system uses the latest valid conclusion in the current session
-2. a summary card or report card is appended to the same session
-3. the original answer remains in place
+1. 使用当前会话最近一次有效结论
+2. 在同一会话内追加摘要卡或报告卡
+3. 原回答保持不变
 
-Success result:
+用户看到的结果：
 
-- the user gets a reusable result without leaving the chat thread
+- 用户在不离开会话的前提下得到可复用结果
 
-Error result:
+## 13. 流程 10：使用知识库页面
 
-- if no valid conclusion exists, `Generate Report` stays disabled
+触发：
 
-## 13. Flow 10 - Use the Knowledge Page
+- 用户进入 `/knowledge`
+- 或在项目聊天页通过知识库入口进入资料管理
 
-Trigger:
+系统行为：
 
-- user opens `/knowledge`
-- or clicks the project-level knowledge button from the composer area
+1. 页面按项目加载来源分组
+2. 用户可以搜索或按项目过滤
+3. 用户先预览来源
+4. 用户可点击 `进入聊天`
+5. 系统在该项目下创建一个新会话
+6. 跳转到 `/projects/[projectId]?sessionId=...`
 
-Sequence:
+用户看到的结果：
 
-1. the page loads source groups by project
-2. the user can search or filter by project
-3. the user previews a source first
-4. the user may click `Enter Chat`
-5. the system creates a new session under that project
-6. the app navigates to `/projects/[projectId]?sessionId=...`
+- 用户可以从资料管理顺滑进入项目对话，而不丢失项目上下文
 
-Success result:
+## 14. 完成定义
 
-- the user can move from source management to conversation without losing project context
+满足以下条件时，v1 主流程成立：
 
-Error result:
-
-- if source loading fails, keep filters visible and show retry guidance
+- 用户能从 `工作台` 创建并打开项目
+- 用户能在项目页新建会话
+- 用户能在会话内或知识库中添加资料
+- 用户能在同一会话里提问、查看来源、继续追问
+- 用户能在同一会话里保存摘要卡、生成报告卡
+- 全流程不依赖旧的 task / search / asset 心智

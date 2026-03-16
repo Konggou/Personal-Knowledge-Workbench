@@ -2,16 +2,16 @@
 
 ## 1. 后端原则
 
-- 前台公开语义必须是 `project / session / message / knowledge / source`
+- 前台公开语义统一为：`项目 / 会话 / 消息 / 知识库 / 来源`
 - 不再把 `task` 作为前台主模型
-- 一个状态库 + 一个向量库
-- 聊天主线程是表层产品事实
-- 会话内结果都通过消息卡表达
-- 资料管理与来源预览必须服务于聊天主线
+- SQLite 是唯一结构化状态中心
+- Qdrant 是默认向量检索后端
+- 聊天主线是产品事实，后端编排必须服务于项目内对话
+- 结果沉淀、来源展示、知识库管理都围绕会话主链展开
 
 ## 2. 核心服务
 
-### 2.1 Project Service
+### 2.1 项目服务
 
 职责：
 
@@ -28,7 +28,7 @@
 - `latest_session_title`
 - `last_activity_at`
 
-### 2.2 Session Service
+### 2.2 会话服务
 
 职责：
 
@@ -37,13 +37,13 @@
 - 全局按项目分组列出会话
 - 发送消息
 - 首条消息后自动生成标题
-- 在用户显式开启时于同一会话中进入调研
+- 在同一会话内处理普通问答与深度调研
 - 生成摘要卡
 - 生成报告卡
 - 删除结果卡
 - 提供会话事件流
 
-### 2.3 Source Service
+### 2.3 来源服务
 
 职责：
 
@@ -53,10 +53,10 @@
 - 网页改链接
 - 来源归档 / 恢复 / 删除
 - 来源预览
-- 入库后同步向量索引
+- 入库后同步结构化索引与向量索引
 - 可选向当前会话写入 `source_update` 消息
 
-### 2.4 Knowledge Service
+### 2.4 知识库服务
 
 职责：
 
@@ -64,45 +64,49 @@
 - 全局资料搜索
 - 按项目分组返回资料
 
-### 2.5 Search Service
+### 2.5 检索服务
 
 职责：
 
-- lexical retrieval
-- semantic retrieval
-- hybrid merge
+- 词法检索
+- 语义检索
+- 混合召回
 - 项目级证据召回
-- 普通 grounded 问答复杂度判定
-- 普通 grounded 条件 rerank
-- 低命中时的条件 HyDE / 查询扩展二次召回
+- grounded 问答复杂度判断
+- 条件 rerank
+- 低命中时的二次召回
 
-说明：
-
-- 当前条件 HyDE 触发仍是 v1 启发式规则：首轮无结果、首条分数偏低、或关键词覆盖偏弱时才触发
-- 后续可升级为更智能的触发逻辑，例如结合真实问句日志、更多检索特征，或引入轻量判定模型
-
-### 2.6 Grounded Generation Service
+### 2.6 Grounded 生成服务
 
 职责：
 
-- 将 grounded 问答统一为 `检索 -> 证据选择 -> 证据包 -> 生成`
-- 只保留最终证据集进入回答链
+- 统一 grounded 主链：`检索 -> 证据选择 -> 证据打包 -> 生成`
+- 只保留最终证据集进入回答链路
 - 组装 evidence pack 供 LLM 使用
-- 优先要求 LLM 返回结构化 JSON
-- JSON 非法时自动降级为 markdown 解析
-- 流式生成中途失败时保留已输出正文并补轻尾注
+- 优先要求 LLM 返回结构化结果
+- 结构化失败时自动降级为 markdown 解析
+- 流式生成中断时保留已输出正文并补轻量提示
 
 ## 3. 数据存储
 
 ### 3.1 SQLite
 
-SQLite 是唯一结构化状态中心。
+SQLite 是唯一结构化状态中心，保存：
+
+- 项目
+- 会话
+- 消息
+- 来源
+- chunk
+- FTS 索引
+- 来源挂载关系
+- 内部元数据
 
 ### 3.2 Qdrant
 
-Qdrant 是默认向量索引层。
+Qdrant 是默认向量检索层。
 
-默认使用 embedded 模式。
+默认使用 embedded 模式，方便本地直接运行。
 
 ## 4. SQLite Schema
 
@@ -110,7 +114,8 @@ Qdrant 是默认向量索引层。
 
 用途：
 
-- 存 schema version
+- 保存 schema version
+- 保存 retrieval FTS version
 
 字段：
 
@@ -139,6 +144,7 @@ Qdrant 是默认向量索引层。
 - `id TEXT PRIMARY KEY`
 - `project_id TEXT NOT NULL`
 - `label TEXT NOT NULL`
+- `snapshot_number INTEGER NOT NULL`
 - `created_at TEXT NOT NULL`
 
 ### 4.4 `sources`
@@ -170,17 +176,25 @@ Qdrant 是默认向量索引层。
 - `id TEXT PRIMARY KEY`
 - `source_id TEXT NOT NULL`
 - `project_id TEXT NOT NULL`
+- `snapshot_id TEXT NOT NULL`
 - `chunk_index INTEGER NOT NULL`
-- `location_label TEXT NOT NULL`
+- `section_label TEXT NOT NULL`
+- `section_type TEXT NOT NULL`
+- `heading_path TEXT NULL`
+- `field_label TEXT NULL`
+- `table_origin TEXT NULL`
+- `proposition_type TEXT NULL`
 - `normalized_text TEXT NOT NULL`
+- `excerpt TEXT NOT NULL`
 - `char_count INTEGER NOT NULL`
+- `retrieval_enabled INTEGER NOT NULL`
 - `created_at TEXT NOT NULL`
 
 ### 4.6 `source_chunk_fts`
 
 用途：
 
-- SQLite FTS 检索
+- SQLite FTS5 在线词法检索索引
 
 ### 4.7 `sessions`
 
@@ -227,8 +241,10 @@ Qdrant 是默认向量索引层。
 - `message_id TEXT NOT NULL`
 - `session_id TEXT NOT NULL`
 - `project_id TEXT NOT NULL`
-- `source_id TEXT NOT NULL`
+- `source_kind TEXT NOT NULL`
+- `source_id TEXT NULL`
 - `chunk_id TEXT NULL`
+- `external_uri TEXT NULL`
 - `source_rank INTEGER NOT NULL`
 - `source_type TEXT NOT NULL`
 - `source_title TEXT NOT NULL`
@@ -237,15 +253,28 @@ Qdrant 是默认向量索引层。
 - `excerpt TEXT NOT NULL`
 - `relevance_score REAL NOT NULL`
 
+### 4.10 `memory_entries`
+
+字段：
+
+- `id TEXT PRIMARY KEY`
+- `scope_type TEXT NOT NULL`
+- `scope_id TEXT NOT NULL`
+- `topic TEXT NOT NULL`
+- `fact_text TEXT NOT NULL`
+- `salience REAL NOT NULL`
+- `source_message_id TEXT NULL`
+- `created_at TEXT NOT NULL`
+
 ## 5. 公开 API
 
-### Projects
+### 项目
 
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/{project_id}`
 
-### Sessions
+### 会话
 
 - `GET /api/v1/projects/{project_id}/sessions`
 - `POST /api/v1/projects/{project_id}/sessions`
@@ -260,11 +289,11 @@ Qdrant 是默认向量索引层。
 - `DELETE /api/v1/messages/{message_id}`
 - `GET /api/v1/sessions/{session_id}/events`
 
-### Knowledge
+### 知识库
 
 - `GET /api/v1/knowledge`
 
-### Sources
+### 来源
 
 - `GET /api/v1/projects/{project_id}/sources`
 - `POST /api/v1/projects/{project_id}/sources/web`
@@ -285,171 +314,171 @@ Qdrant 是默认向量索引层。
 
 ## 7. 前后端边界
 
-- 前端不依赖旧 task API
-- 前端只消费项目、会话、知识库、来源语义
-- 来源气泡只代表最终喂给模型的证据，不暴露召回候选或内部 rerank 术语
+- 前台不得依赖旧 task API
+- 前台只消费项目、会话、知识库、来源语义
+- 来源气泡只代表最终证据集，不暴露召回候选或内部 rerank 术语
 - 来源详细预览可按前端交互使用覆盖式浮层，但不改变后端对象模型
 
-## 8. V2.1 Retrieval Foundation
+## 8. V2.1 检索基础升级
 
-- The grounded retrieval path now keeps the public API unchanged while adding an internal two-stage strategy:
-  - first pass hybrid retrieval
-  - second pass contextual rewrite / field alias expansion / conditional HyDE
-- Retrieval now accepts recent user-message history as context clues for follow-up questions.
-- Internal retrieval diagnostics are recorded for backend use only:
-  - whether first pass was low confidence
-  - whether contextual rewrite was triggered
-  - whether HyDE was triggered
-  - final source count
-  - final grounded candidate status
-- Diagnostics are intentionally not exposed in frontend payloads or SSE semantics.
+- grounded 检索在不改变公开 API 的前提下引入两段式策略：
+  - 首轮混合检索
+  - 次轮上下文改写 / 字段别名扩展 / 条件 HyDE
+- 检索会使用最近用户消息作为上下文线索，改善中文追问与代词承接
+- 检索诊断仅供后端内部使用，包括：
+  - 首轮是否低置信
+  - 是否触发上下文改写
+  - 是否触发 HyDE
+  - 最终来源数
+  - 是否形成 grounded candidate
 
-## 9. V2 Direction After Article Review
+## 9. V2.2 结构化切块
 
-- Near-term priorities:
-  - query transformation
-  - adaptive retrieval
-  - CRAG-lite style retrieval repair
-  - semantic / proposition chunking
-  - lightweight hierarchical retrieval
-  - contextual compression and relevant-segment extraction
-- Explicitly out of the current V2 mainline:
-  - GraphRAG
-  - Self-RAG
-  - RL-enhanced RAG
-  - full multimodal RAG
-
-## 10. V3 Agentic Runtime
-
-### 10.1 Runtime Switch
-
-- Session send flow now supports two internal runtimes:
-  - `v3` default graph runtime
-  - `v2` legacy fallback runtime
-- Runtime selection is controlled by `WORKBENCH_AGENT_RUNTIME_VERSION`.
-
-### 10.2 Internal Orchestration
-
-- `AgentOrchestratorService` is the internal graph entry for all message turns.
-- The graph remains bounded and chat-first:
-  - `chat_graph`
-    - `load_turn_context -> load_memory -> classify_turn -> project_retrieval -> optional_web_branch -> evidence_selection -> pre_answer_check`
-  - `research_graph`
-    - `load_turn_context -> load_memory -> plan_turn -> project_retrieval -> optional_web_branch -> fuse_evidence -> pre_answer_check`
-- `pre_answer_check` now supports one bounded project-side retry before generation:
-  - if evidence is present but still not focused enough, the graph can re-run project retrieval once with a refined focus query
-  - if evidence is still insufficient and web supplementation is allowed, the graph may branch to web once
-  - internal diagnostics record `query_trace`, retry counts, and the final readiness decision
-- The graph never becomes a public “agent platform” surface.
-
-### 10.3 Tools / Subsystems
-
-- `project_search`
-  - still powered by the existing structured retrieval stack
-- `memory_lookup`
-  - session and project scoped memory retrieval
-- `memory_write`
-  - only after successful assistant answers
-  - project memory is only derived from project-backed evidence
-  - external-web evidence can help session memory for short follow-up continuity, but does not become project memory
-- `web_search` / `web_fetch`
-  - only enabled when the user explicitly turns on `web_browsing`
-  - URLs are normalized before fetch/save so tracking parameters do not create duplicate knowledge-base entries
-  - fetched pages are lightly cleaned to remove obvious boilerplate, duplicate paragraphs, and weak navigation text
-  - if a page is structurally valid but extremely short, extraction now falls back to a lighter paragraph filter instead of failing ingestion outright
-- `read_source_context`
-  - internal helper for source preview style context reads
-
-### 10.4 Persistence Additions
-
-- New table: `memory_entries`
-  - `scope_type`
-  - `scope_id`
-  - `topic`
-  - `fact_text`
-  - `salience`
-  - `source_message_id`
-- lookup behavior:
-  - contextual follow-up queries give a small priority boost to session-scoped memory
-  - older or stale memory entries are slightly deprioritized during ranking
-- `message_sources` now supports mixed evidence kinds:
-  - `source_kind = project_source | external_web`
-  - `source_id` can be null for external web evidence
-  - `external_uri` stores the original web page URL for external evidence
-- grounded evidence fusion keeps project evidence primary:
-  - normal grounded delivery only allows external-web evidence when project hits still leave a gap
-  - research delivery can keep a small external supplement budget, but project evidence still ranks first
- - readiness checking now also understands external-only evidence:
-   - when project retrieval is empty but manual web supplementation returns a strong enough evidence pack, `pre_answer_check` can proceed instead of forcing an unnecessary fallback
-
-### 10.5 Public Contract Changes
-
-- Public API family is unchanged.
-- Message creation payload now accepts:
-  - `deep_research: boolean`
-  - `web_browsing: boolean`
-- Public frontend language is unchanged; the backend-only concepts below remain hidden:
-  - LangGraph
-  - tool calls
-  - memory internals
-  - readiness checker
-## 10. V2.2 Structured Chunking Notes
-
-- `source_chunks` now carries structured retrieval metadata:
+- `source_chunks` 增加结构化检索元数据：
   - `section_type`
   - `heading_path`
   - `field_label`
   - `table_origin`
   - `proposition_type`
-- `SourceService` now builds structured chunk blocks before persistence:
-  - DOCX: heading-aware, field-aware, table-aware
-  - PDF: lightweight heading/field detection plus body chunk assembly
-- Proposition chunks are now generated from structured body/field content and classified into lightweight proposition types.
-- `SearchService` now treats field chunks and heading paths as first-class lexical signals.
-- `VectorStore` payloads now persist the same metadata so semantic hits can be merged back with structured context.
-- `SearchService` now also performs a lightweight hierarchical expansion step:
-  - anchor hits from headings can pull in sibling body chunks under the same `heading_path`
-  - field hits only expand when they already belong to a scoped heading path
-  - this is intentionally a light retrieval repair layer, not a full chapter-summary hierarchy
+- `SourceService` 在入库前构造结构化 chunk：
+  - DOCX：保留标题、字段、表格、正文结构
+  - PDF：做轻量标题和字段检测
+- `SearchService` 将字段块和标题路径视为一等词法信号
+- `VectorStore` payload 保留同样的结构化元数据
+- 检索支持轻量层级扩展：
+  - 标题命中可带出同一 `heading_path` 下的正文
+  - 字段命中只在存在范围约束时扩展
 
-## 11. V2.3 Grounded Delivery Notes
+## 10. V2.3 Grounded 交付升级
 
-- `GroundedGenerationService` now inserts an internal `selection -> compression -> evidence pack` layer after retrieval.
-- Grounded delivery now:
-  - requests a wider internal candidate set
-  - selects the final evidence budget with a structure-aware selector
-  - compresses long body evidence into sentence-focused excerpts
-  - preserves `source_excerpt` separately for internal prompt/debug use
-- Delivery diagnostics now include:
-  - `selection`
-  - `compression`
-  - `selected_evidence_count`
-- Low-confidence second-pass false positives are rejected before the answer is allowed to remain in `project_grounded`.
+- `GroundedGenerationService` 在检索后增加：
+  - 证据选择
+  - 上下文压缩
+  - evidence pack 组装
+- grounded 主链会：
+  - 先拉宽内部候选集
+  - 用结构感知规则选最终证据预算
+  - 压缩长正文为句子级摘录
+  - 内部保留 `source_excerpt`
+- 低置信的二次召回假阳性会在回答前被拒绝
 
-## 12. V2.4 Eval And Observability Notes
+## 11. V2.4 评测与可观测性
 
-- Added an internal retrieval evaluation service and CLI runner:
+- 增加内部检索评测服务与 CLI：
   - `app.services.retrieval_eval_service`
   - `scripts/run_retrieval_eval.py`
-- The eval suite seeds a local DOCX fixture and records, per case:
-  - grounded candidate status
-  - second-pass trigger status
-  - hit count
-  - packed hit count
+- 本地评测会记录：
+  - grounded candidate 状态
+  - second-pass 触发状态
+  - hit 数
+  - packed hit 数
   - retrieval diagnostics
   - grounded-delivery diagnostics
-- These diagnostics remain internal and are intentionally not exposed through public API payloads or frontend SSE contracts.
-- V3.1 extends this into an agentic eval layer:
-- `run_agentic_eval` covers project-only grounding, web supplement, memory-assisted follow-up, bounded retry, project/web conflict, and weak-source fallback
-- `run_v3_eval` combines the retrieval suite and the agentic suite into one local JSON report
-- the agentic suite forces heuristic planner/checker behavior so local regression results stay comparable even when an external LLM is configured
+- 这些诊断不暴露到公开 API 或 SSE 合同
 
-## 13. V3 Final Frontend-Visible Delivery Notes
+## 12. V3 聊天优先 Agent 运行时
 
-- Source rendering in the chat view now stays chat-first while distinguishing evidence origins internally:
-  - project-backed evidence renders as `项目资料`
-  - manual web supplementation renders as `网页补充`
-- External web evidence can be manually saved into the knowledge base directly from the source list without exposing tool/runtime terminology.
-- V3 `chat_graph` keeps the V2 grounded-search contract for complex questions:
-  - non-research complex grounded turns still trigger rerank
-  - this remains an internal retrieval quality behavior, not a public-mode change
+### 12.1 运行时切换
+
+- 会话消息流支持两套内部运行时：
+  - `v3` 默认图编排运行时
+  - `v2` 旧链路回退运行时
+- 运行时选择由 `WORKBENCH_AGENT_RUNTIME_VERSION` 控制
+
+### 12.2 内部编排
+
+- `AgentOrchestratorService` 是消息轮次的内部图入口
+- 图保持边界明确、聊天优先：
+  - `chat_graph`
+    - `load_turn_context -> load_memory -> classify_turn -> project_retrieval -> optional_web_branch -> evidence_selection -> pre_answer_check`
+  - `research_graph`
+    - `load_turn_context -> load_memory -> plan_turn -> project_retrieval -> optional_web_branch -> fuse_evidence -> pre_answer_check`
+- `pre_answer_check` 支持一次有界的项目侧重试
+
+### 12.3 子系统
+
+- `project_search`
+  - 仍由项目内结构化检索栈驱动
+- `memory_lookup`
+  - 支持会话与项目作用域记忆检索
+- `memory_write`
+  - 仅在成功回答后写入
+- `web_search` / `web_fetch`
+  - 仅在用户显式开启 `联网补充` 时启用
+- `read_source_context`
+  - 供来源预览读取上下文
+
+### 12.4 持久化补充
+
+- 新增表：`memory_entries`
+- `message_sources` 支持：
+  - `source_kind = project_source | external_web`
+  - `source_id` 可空
+  - `external_uri` 保存原始网页地址
+- grounded 融合保持项目证据优先
+
+## 13. V4 检索与延迟升级
+
+### 13.1 V4 检索栈
+
+- grounded 检索现已升级为真实的 V4 混合栈：
+  - SQLite `FTS5 MATCH`
+  - `bm25(...)` 词法排序
+  - Qdrant 语义检索
+  - `RRF` 融合
+  - 融合后有界 rerank
+- `source_chunk_fts` 已成为在线检索入口，而不再只是入库时维护的旁路表
+- 词法检索在 BM25 之上仍保留结构化加权：
+  - `field_label`
+  - `heading_path`
+  - `section_type`
+  - `proposition_type`
+
+### 13.2 融合与 rerank
+
+- 混合融合不再直接相加词法分与语义分
+- `SearchService` 使用 `RRF`，因此：
+  - 只有词法命中的结果可以保留
+  - 只有语义命中的结果可以保留
+  - 双路共享命中会自然上浮
+- second-pass 结果也并入同一 rank fusion 逻辑
+- rerank 层独立为内部服务，支持：
+  - `rule`
+  - `cross_encoder_local`
+  - `cross_encoder_remote`
+
+### 13.3 运行时安全
+
+- retrieval/index version 独立于主 schema version 追踪
+- 启动或首次检索时，如果发现：
+  - FTS 版本不匹配
+  - FTS 行数与最新快照不一致
+  - FTS 内容无效
+  后端会自动重建 SQLite FTS 索引
+
+### 13.4 评测与诊断
+
+- 内部 retrieval diagnostics 现在区分：
+  - `first_pass`
+  - `effective_pass`
+  - `rerank`
+  - fused top score
+- `retrieval_eval_service` 会记录：
+  - lexical hit 数
+  - semantic hit 数
+  - fused hit 数
+  - rerank backend / applied
+
+### 13.5 默认聊天低延迟路径
+
+- 对普通项目内问答，如果：
+  - `deep_research = false`
+  - `web_browsing = false`
+  则：
+  - planner 走启发式
+  - pre-answer readiness 走启发式
+- 这样保留 grounded 与来源能力的同时，避免默认网页聊天多打两次 LLM
+- 只有用户显式开启：
+  - `深度调研`
+  - `联网补充`
+  才进入更重的路径

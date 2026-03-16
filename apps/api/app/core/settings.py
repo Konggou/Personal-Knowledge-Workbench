@@ -50,6 +50,20 @@ class Settings(BaseModel):
     embedding_model_name: str = _setting("WORKBENCH_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     embedding_dimension: int = int(_setting("WORKBENCH_EMBEDDING_DIMENSION", "384"))
     embedding_allow_downloads: bool = str(_setting("WORKBENCH_EMBEDDING_ALLOW_DOWNLOADS", "false")).lower() == "true"
+    retrieval_fts_version: str = _setting("WORKBENCH_RETRIEVAL_FTS_VERSION", "v4_rrf_ce")
+    retrieval_lexical_candidate_limit: int = int(_setting("WORKBENCH_RETRIEVAL_LEXICAL_CANDIDATE_LIMIT", "24"))
+    retrieval_semantic_candidate_limit: int = int(_setting("WORKBENCH_RETRIEVAL_SEMANTIC_CANDIDATE_LIMIT", "24"))
+    retrieval_rrf_k: int = int(_setting("WORKBENCH_RETRIEVAL_RRF_K", "50"))
+    retrieval_second_pass_limit: int = int(_setting("WORKBENCH_RETRIEVAL_SECOND_PASS_LIMIT", "4"))
+    reranker_backend: str = _setting("WORKBENCH_RERANKER_BACKEND", "cross_encoder_local")
+    reranker_model_name: str = _setting(
+        "WORKBENCH_RERANKER_MODEL",
+        "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    )
+    reranker_allow_downloads: bool = str(_setting("WORKBENCH_RERANKER_ALLOW_DOWNLOADS", "false")).lower() == "true"
+    reranker_remote_url: str = _setting("WORKBENCH_RERANKER_REMOTE_URL", "")
+    reranker_remote_timeout_seconds: float = float(_setting("WORKBENCH_RERANKER_REMOTE_TIMEOUT_SECONDS", "20"))
+    reranker_top_n: int = int(_setting("WORKBENCH_RERANKER_TOP_N", "8"))
     llm_api_key: str = _setting("WORKBENCH_LLM_API_KEY", _setting("DEEPSEEK_API_KEY", ""))
     llm_base_url: str = _setting("WORKBENCH_LLM_BASE_URL", "https://api.deepseek.com")
     llm_model: str = _setting("WORKBENCH_LLM_MODEL", "deepseek-chat")
