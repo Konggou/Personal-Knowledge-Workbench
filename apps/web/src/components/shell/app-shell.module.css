@@ -1,107 +1,247 @@
+/* ==========================================================================
+   App Shell - 悬浮学术导航
+   ========================================================================== */
+
 .shell {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top right, rgba(216, 236, 233, 0.7), transparent 26%),
-    var(--bg-canvas);
+  background: var(--bg-canvas);
+  position: relative;
 }
 
+/* 微妙的背景纹理 */
+.shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(230, 168, 69, 0.03), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(126, 184, 218, 0.02), transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ==========================================================================
+   Header - 悬浮玻璃导航
+   ========================================================================== */
+
 .header {
-  position: sticky;
-  top: 0;
-  z-index: 30;
+  position: fixed;
+  top: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: rgba(246, 243, 238, 0.88);
-  backdrop-filter: blur(14px);
+  gap: var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-xl);
+  background: rgba(20, 24, 31, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 
+    var(--shadow-soft),
+    0 0 0 1px rgba(0, 0, 0, 0.2);
+  animation: slideDown var(--duration-slow) var(--ease-out-expo) forwards;
+  max-width: calc(100vw - var(--space-8));
+  width: max-content;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .brand {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
   color: var(--text-primary);
-  font-size: 17px;
-  font-weight: 700;
   text-decoration: none;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition: all var(--duration-fast) var(--ease-out-expo);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
 }
+
+.brand:hover {
+  color: var(--accent-primary);
+  background: var(--accent-soft);
+}
+
+/* ==========================================================================
+   Navigation - 胶囊式导航项
+   ========================================================================== */
 
 .nav {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-1);
 }
 
 .navLink {
-  padding: 8px 14px;
-  border-radius: 999px;
+  position: relative;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
   color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
   text-decoration: none;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: all var(--duration-base) var(--ease-out-expo);
+  white-space: nowrap;
+}
+
+.navLink::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  width: 16px;
+  height: 2px;
+  background: var(--accent-primary);
+  border-radius: 1px;
+  transition: transform var(--duration-base) var(--ease-out-expo);
 }
 
 .navLink:hover {
-  background: var(--bg-surface);
   color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .navLinkActive {
-  background: var(--accent-soft);
   color: var(--accent-primary);
+  background: var(--accent-soft);
 }
+
+.navLinkActive::after {
+  transform: translateX(-50%) scaleX(1);
+}
+
+/* ==========================================================================
+   Hero Section - 编辑式页眉
+   ========================================================================== */
 
 .hero {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 24px;
-  padding: 28px 32px 0;
+  gap: var(--space-6);
+  padding: 120px var(--space-8) 0;
+  max-width: 1400px;
+  margin: 0 auto;
+  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) 0.1s backwards;
 }
 
 .title {
-  margin: 0;
-  font-size: 42px;
-  line-height: 1.05;
+  font-family: var(--font-display);
+  font-size: 3rem;
+  font-weight: 400;
+  line-height: 1.1;
   letter-spacing: -0.03em;
+  margin: 0;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .subtitle {
-  margin: 12px 0 0;
-  max-width: 780px;
+  margin: var(--space-3) 0 0;
+  max-width: 600px;
   color: var(--text-secondary);
-  font-size: 18px;
+  font-size: 1.0625rem;
+  line-height: 1.7;
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
+  flex-shrink: 0;
 }
+
+/* ==========================================================================
+   Main Content Area
+   ========================================================================== */
 
 .main {
-  padding: 28px 32px 36px;
+  position: relative;
+  z-index: 1;
+  padding: var(--space-8);
+  padding-top: var(--space-6);
+  max-width: 1400px;
+  margin: 0 auto;
+  animation: fadeIn var(--duration-slow) var(--ease-out-expo) 0.2s backwards;
 }
 
-@media (max-width: 960px) {
-  .header,
-  .hero,
-  .main {
-    padding-left: 20px;
-    padding-right: 20px;
-  }
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
 
-  .header,
+@media (max-width: 960px) {
+  .header {
+    top: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    gap: var(--space-3);
+  }
+  
+  .brand {
+    font-size: 1rem;
+    padding: var(--space-1) var(--space-2);
+  }
+  
+  .navLink {
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.8125rem;
+  }
+  
   .hero {
+    padding: 100px var(--space-5) 0;
     flex-direction: column;
     align-items: flex-start;
+    gap: var(--space-4);
   }
-
-  .nav {
-    flex-wrap: wrap;
-  }
-
+  
   .title {
-    font-size: 34px;
+    font-size: 2.25rem;
+  }
+  
+  .actions {
+    width: 100%;
+  }
+  
+  .main {
+    padding: var(--space-5);
+    padding-top: var(--space-4);
+  }
+}
+
+@media (max-width: 640px) {
+  .header {
+    width: calc(100vw - var(--space-6));
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .hero {
+    padding-top: 140px;
+  }
+  
+  .title {
+    font-size: 1.875rem;
   }
 }

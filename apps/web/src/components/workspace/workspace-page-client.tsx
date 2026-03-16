@@ -1,11 +1,11 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 
 import type { ProjectSummary } from "@/lib/api";
-import { createProject } from "@/lib/api";
+import { createProject, deleteProject } from "@/lib/api";
 
 import styles from "./workspace-page-client.module.css";
 
@@ -26,22 +26,39 @@ export function WorkspacePageClient({
   const [description, setDescription] = useState("");
   const [query, setQuery] = useState(initialQuery);
   const [error, setError] = useState<string | null>(null);
+  const [projects, setProjects] = useState(initialProjects);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  async function handleCreateProject() {
+  const handleCreateProject = useCallback(async () => {
     setError(null);
     try {
-      const project = await createProject({
+      const newProject = await createProject({
         name,
         description,
         default_external_policy: "allow_external",
       });
-      router.push(`/projects/${project.id}`);
+      router.push(`/projects/${newProject.id}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "创建项目失败。");
     }
-  }
+  }, [name, description, router]);
 
-  function handleSearch() {
+  const handleDeleteProject = useCallback(async (projectId: string, projectName: string) => {
+    if (!window.confirm(`确认删除项目「${projectName}」吗？此操作不可恢复。`)) {
+      return;
+    }
+    setDeletingId(projectId);
+    try {
+      await deleteProject(projectId);
+      setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "删除项目失败。");
+    } finally {
+      setDeletingId(null);
+    }
+  }, []);
+
+  const handleSearch = useCallback(() => {
     startTransition(() => {
       const params = new URLSearchParams();
       if (query.trim()) {
@@ -52,9 +69,7 @@ export function WorkspacePageClient({
       }
       router.push(`/workspace${params.toString() ? `?${params.toString()}` : ""}`);
     });
-  }
-
-  const projects = initialProjects;
+  }, [query, includeArchived, router]);
 
   return (
     <div className={styles.layout}>
@@ -118,17 +133,28 @@ export function WorkspacePageClient({
 
       <div className={styles.projectGrid}>
         {projects.map((project) => (
-          <Link key={project.id} className={styles.projectCard} href={`/projects/${project.id}`}>
-            <div className={styles.projectCardHeader}>
-              <span className={styles.projectName}>{project.name}</span>
-              <span className={styles.projectMeta}>{project.active_source_count} 份资料</span>
-            </div>
-            <p className={styles.projectDescription}>{project.description}</p>
-            <div className={styles.projectFooter}>
-              <span>{project.active_session_count} 个会话</span>
-              <span>{project.latest_session_title ?? "还没有会话"}</span>
-            </div>
-          </Link>
+          <div key={project.id} className={styles.projectCardWrapper}>
+            <button
+              className={styles.deleteButton}
+              disabled={deletingId === project.id}
+              onClick={() => void handleDeleteProject(project.id, project.name)}
+              title="删除项目"
+              type="button"
+            >
+              {deletingId === project.id ? "..." : "×"}
+            </button>
+            <Link className={styles.projectCard} href={`/projects/${project.id}`}>
+              <div className={styles.projectCardHeader}>
+                <span className={styles.projectName}>{project.name}</span>
+                <span className={styles.projectMeta}>{project.active_source_count} 份资料</span>
+              </div>
+              <p className={styles.projectDescription}>{project.description}</p>
+              <div className={styles.projectFooter}>
+                <span>{project.active_session_count} 个会话</span>
+                <span>{project.latest_session_title ?? "还没有会话"}</span>
+              </div>
+            </Link>
+          </div>
         ))}
         {!projects.length ? <div className={styles.emptyState}>当前没有命中的项目。你可以先创建一个新的知识库项目。</div> : null}
       </div>

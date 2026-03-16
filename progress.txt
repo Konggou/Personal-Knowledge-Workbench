@@ -150,6 +150,21 @@ V4 已落地
   - 复杂问题总耗时约从 `45.56s` 降到 `6.44s`
 - 当前主要瓶颈已经变成最终 grounded 回答的 LLM 生成，而不是 SQLite / Qdrant / RRF / 规则 rerank
 
+项目删除与数据清理功能
+- 工作台页面支持删除项目（软删除，status 变为 'archived'）
+- 新增 CleanupService 自动清理超过 30 天的归档项目
+- 清理范围包括：项目、会话、消息、来源、chunks、Qdrant 向量
+- API 启动时自动执行清理，不阻塞服务启动
+- 提供手动清理接口：`POST /api/v1/admin/cleanup`
+- 提供预览接口：`GET /api/v1/admin/cleanup/preview`
+- 新增测试覆盖：项目删除软删除验证、已归档项目访问验证、404 验证
+- 修复：已归档项目的会话和来源不再出现在全局列表和项目列表中
+- 修复：知识库的项目筛选下拉列表不再显示已归档项目
+- 代码审查修复：
+  - 移除 `list_all_sources` 未使用的 `include_archived_projects` 参数
+  - 使用 `useCallback` 包装 `applyFilters` 避免闭包问题
+  - 完善 React Hook 依赖数组
+
 近期体验改动
 - 项目聊天输入框支持：
   - `Enter` 发送
@@ -162,6 +177,11 @@ V4 已落地
 - V4 关键回归通过：
   - `.\.venv\Scripts\python -m pytest ..\..\tests\backend\test_vertical_slices.py ..\..\tests\backend\test_retrieval_eval.py ..\..\tests\backend\test_grounded_rag.py ..\..\tests\backend\test_retrieval_v4.py -q`
   - `35 passed`
+- 项目删除功能测试通过：
+  - 软删除验证
+  - 已归档项目会话/来源访问验证
+  - 404 边界验证
+  - 3 个新增测试全部通过
 - 前端类型检查通过：
   - `npm run typecheck`
 - 前后端本地链路可启动：

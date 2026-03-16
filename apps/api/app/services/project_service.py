@@ -25,3 +25,7 @@ class ProjectService:
             default_external_policy=default_external_policy,
         )
         return record.to_summary()
+
+    def delete_project(self, project_id: str) -> dict | None:
+        record = self.repository.delete_project(project_id)
+        return None if record is None else record.to_summary()

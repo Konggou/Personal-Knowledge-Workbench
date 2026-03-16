@@ -179,6 +179,16 @@ export async function createProject(input: {
   return payload.item;
 }
 
+export async function deleteProject(projectId: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/api/v1/projects/${projectId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `Failed to delete project: ${response.status}`);
+  }
+}
+
 export async function listProjectSessions(projectId: string): Promise<SessionSummary[]> {
   const response = await fetch(`${apiBaseUrl}/api/v1/projects/${projectId}/sessions`, { cache: "no-store" });
   const payload = await readJson<{ items: SessionSummary[] }>(response);

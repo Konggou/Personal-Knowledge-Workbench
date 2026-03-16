@@ -158,7 +158,14 @@ class LLMService:
             research_mode=research_mode,
             context_notes=context_notes,
         )
-        raw_text = self._complete_messages(messages=messages, temperature=0.2)
+        raw_text = self._complete_messages(
+            messages=messages,
+            temperature=0.2,
+            max_tokens=self._grounded_completion_budget(
+                conversation=conversation,
+                research_mode=research_mode,
+            ),
+        )
         return self.parse_grounded_reply(raw_text)
 
     def generate_hypothetical_passage(self, *, query: str, research_mode: bool = False) -> str:
@@ -188,7 +195,14 @@ class LLMService:
             context_notes=context_notes,
         )
         parser = GroundedJsonStreamParser(sanitizer=self._sanitize_output)
-        for chunk in self._stream_completion(messages=messages, temperature=0.2):
+        for chunk in self._stream_completion(
+            messages=messages,
+            temperature=0.2,
+            max_tokens=self._grounded_completion_budget(
+                conversation=conversation,
+                research_mode=research_mode,
+            ),
+        ):
             for delta in parser.push(chunk):
                 yield delta
 
@@ -407,16 +421,20 @@ class LLMService:
         context_notes: list[str] | None,
     ) -> list[dict]:
         history = self._conversation_to_messages(conversation)
-        recent_history = history[-12:]
+        recent_history = history[-8:]
         if not recent_history or recent_history[-1]["role"] != "user":
             raise RuntimeError("Grounded reply requires the latest user message.")
 
         current_question = recent_history[-1]["content"]
+        factoid_mode = self._query_looks_factoid(current_question) and not research_mode
         prior_history = recent_history[:-1]
+        if factoid_mode:
+            prior_history = prior_history[-2:]
+
         evidence_lines: list[str] = []
         for index, item in enumerate(evidence_pack, start=1):
             evidence_index = item.get("evidence_index", index)
-            context_parts = []
+            context_parts: list[str] = []
             if item.get("heading_path"):
                 context_parts.append(f"heading_path={item['heading_path']}")
             if item.get("field_label"):
@@ -429,37 +447,41 @@ class LLMService:
                 "\n".join(
                     [
                         f"[证据 {evidence_index}]",
-                        f"source_id: {item.get('source_id') or 'external'}",
                         f"title: {item['source_title']}",
-                        f"source_type: {item['source_type']}",
                         f"location: {item['location_label']}",
                         f"context: {'; '.join(context_parts)}" if context_parts else "context: none",
-                        f"excerpt: {item['excerpt']}",
-                        f"source_excerpt: {item['source_excerpt']}" if item.get("source_excerpt") else "source_excerpt: none",
+                        f"excerpt: {item.get('llm_excerpt') or item['excerpt']}",
                     ]
                 )
             )
+
         answer_style = (
             "如果问题复杂，可以在 answer_md 里使用小标题和短列表。"
             if research_mode
-            else "answer_md 默认用自然短文回答，只有内容天然成列表时才使用列表。"
+            else "answer_md 默认用自然短文回答；只有明确的事实题才优先直接回答关键结论。"
+        )
+        length_style = (
+            "事实题尽量用一句话完成回答，通常不超过两句。"
+            if factoid_mode
+            else "普通问题优先控制在 2 到 4 个短段落内；只有确有必要时才使用短列表。"
         )
         context_block = ""
         if context_notes:
-            context_block = "\n\n可参考的会话/项目上下文：\n" + "\n".join(f"- {note}" for note in context_notes[:5])
+            note_limit = 3 if factoid_mode else 5
+            context_block = "\n\n可参考上下文：\n" + "\n".join(f"- {note}" for note in context_notes[:note_limit])
         grounded_prompt = (
-            "你正在基于项目资料回答用户问题。请严格输出 JSON，不要输出代码块，不要输出额外解释。"
-            '\n\nJSON 必须包含以下键，并保持 answer_md 放在第一位：\n{"answer_md":"...","used_general_knowledge":false,"evidence_status":"grounded"}'
-            "\n\n规则："
+            "你正在基于项目资料回答用户问题。请只输出 JSON，不要输出代码块或额外解释。"
+            '\nJSON 结构：{"answer_md":"...","used_general_knowledge":false,"evidence_status":"grounded"}'
+            "\n规则："
             "\n1. 优先依据给定证据回答。"
-            "\n2. 可以补少量通用常识让回答更自然，但不能把通用常识伪装成项目资料。"
-            "\n3. 如果证据不足，evidence_status 必须是 insufficient，answer_md 里也要明确说不足。"
-            "\n4. 如果证据互相冲突，evidence_status 必须是 conflicting，answer_md 里也要明确说冲突。"
-            "\n5. 如果证据足够，evidence_status 用 grounded。"
-            "\n6. 不要在正文中主动枚举来源标题，除非必须用来源名消歧。"
+            "\n2. 证据不足时，evidence_status 必须是 insufficient。"
+            "\n3. 证据冲突时，evidence_status 必须是 conflicting。"
+            "\n4. 证据足够时，evidence_status 用 grounded。"
+            "\n5. 不要把通用常识伪装成项目资料。"
+            "\n6. 非必要不要在正文里枚举来源标题。"
             f"\n7. {answer_style}"
-            "\n8. 如果答案天然适合分点，必须输出合法 Markdown 列表；每个编号或项目符号都要单独占一行。"
-            "\n9. 只有在确实补充了项目外通用常识时，used_general_knowledge 才能为 true。"
+            f"\n8. {length_style}"
+            "\n9. 只有确实补充了项目外常识，used_general_knowledge 才能为 true。"
             f"\n\n用户问题：\n{current_question}"
             f"{context_block}"
             "\n\n可用项目证据：\n"
@@ -693,10 +715,74 @@ class LLMService:
 
     def _query_looks_factoid(self, query: str) -> bool:
         normalized = " ".join(query.split()).lower()
-        return any(
-            keyword in normalized
-            for keyword in ("什么", "哪个", "哪种", "多少", "默认", "名称", "题目", "标题", "谁", "何时", "哪里")
+        if not normalized:
+            return False
+
+        complex_markers = (
+            "\u4e3a\u4ec0\u4e48",
+            "\u4e3a\u4f55",
+            "\u539f\u56e0",
+            "\u5982\u4f55",
+            "\u600e\u4e48",
+            "\u600e\u6837",
+            "\u6bd4\u8f83",
+            "\u533a\u522b",
+            "\u5dee\u5f02",
+            "\u4f18\u7f3a\u70b9",
+            "\u53ef\u884c",
+            "\u5efa\u8bae",
+            "\u5206\u6790",
+            "\u603b\u7ed3",
+            "\u89e3\u91ca",
+            "\u65b9\u6848",
+            "\u601d\u8def",
         )
+        if any(marker in normalized for marker in complex_markers):
+            return False
+
+        strong_factoid_markers = (
+            "\u540d\u79f0",
+            "\u9898\u76ee",
+            "\u6807\u9898",
+            "\u4f5c\u8005",
+            "\u65f6\u95f4",
+            "\u65e5\u671f",
+            "\u9ed8\u8ba4",
+            "\u7248\u672c",
+            "\u7f16\u53f7",
+            "\u5730\u5740",
+            "\u5730\u70b9",
+            "\u4f4d\u7f6e",
+            "\u8c01",
+            "\u4f55\u65f6",
+            "\u54ea\u91cc",
+            "\u591a\u5c11",
+            "\u54ea\u4e2a",
+            "\u54ea\u79cd",
+        )
+        if any(marker in normalized for marker in strong_factoid_markers):
+            return True
+
+        if "\u4ec0\u4e48" in normalized:
+            return len(normalized) <= 12 and "\u4ec0\u4e48\u662f" not in normalized
+
+        return False
+
+    def _grounded_completion_budget(self, *, conversation: list[dict], research_mode: bool) -> int:
+        settings = get_settings()
+        if research_mode:
+            return settings.llm_grounded_research_max_tokens
+
+        latest_user_query = ""
+        for item in reversed(conversation):
+            if item.get("message_type") == "user_prompt":
+                latest_user_query = str(item.get("content_md") or "").strip()
+                if latest_user_query:
+                    break
+
+        if self._query_looks_factoid(latest_user_query):
+            return settings.llm_grounded_factoid_max_tokens
+        return settings.llm_grounded_default_max_tokens
 
     def _conversation_to_messages(self, conversation: list[dict]) -> list[dict]:
         messages: list[dict] = []
@@ -714,19 +800,22 @@ class LLMService:
             messages.append({"role": role, "content": content})
         return messages
 
-    def _complete_messages(self, *, messages: list[dict], temperature: float) -> str:
+    def _complete_messages(self, *, messages: list[dict], temperature: float, max_tokens: int | None = None) -> str:
         settings = get_settings()
         url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
+        payload = {
+            "model": settings.llm_model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
 
         try:
             response = httpx.post(
                 url,
                 headers=self._headers(settings.llm_api_key),
-                json={
-                    "model": settings.llm_model,
-                    "messages": messages,
-                    "temperature": temperature,
-                },
+                json=payload,
                 timeout=settings.llm_timeout_seconds,
             )
             response.raise_for_status()
@@ -743,21 +832,24 @@ class LLMService:
             raise RuntimeError(f"LLM returned an unexpected payload shape: {payload}") from exc
         return self._coerce_content_to_text(content)
 
-    def _stream_completion(self, *, messages: list[dict], temperature: float) -> Iterator[str]:
+    def _stream_completion(self, *, messages: list[dict], temperature: float, max_tokens: int | None = None) -> Iterator[str]:
         settings = get_settings()
         url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
+        payload = {
+            "model": settings.llm_model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
 
         try:
             with httpx.stream(
                 "POST",
                 url,
                 headers=self._headers(settings.llm_api_key),
-                json={
-                    "model": settings.llm_model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "stream": True,
-                },
+                json=payload,
                 timeout=settings.llm_timeout_seconds,
             ) as response:
                 response.raise_for_status()

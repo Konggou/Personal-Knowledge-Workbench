@@ -273,6 +273,12 @@ Qdrant 是默认向量检索层。
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/{project_id}`
+- `DELETE /api/v1/projects/{project_id}` (软删除，status 变为 'archived')
+
+### 管理 API
+
+- `POST /api/v1/admin/cleanup` - 手动触发数据清理
+- `GET /api/v1/admin/cleanup/preview` - 预览待清理数据
 
 ### 会话
 
@@ -307,10 +313,22 @@ Qdrant 是默认向量检索层。
 
 ## 6. 删除与归档规则
 
+- **项目删除**：软删除（status 设置为 'archived'），超过 30 天后由清理服务物理删除
 - 会话删除：软删除
 - 来源删除：软删除
 - 结果卡删除：软删除
 - 来源归档：退出主检索，但记录保留
+
+## 6.1 数据清理服务 (CleanupService)
+
+自动清理超过 30 天的软删除数据：
+
+- **启动时执行**：API 启动后异步运行，不阻塞服务启动
+- **清理范围**：
+  - 已归档项目（status='archived' 且 archived_at > 30 天）
+  - 项目的所有关联数据（会话、消息、来源、chunks、Qdrant 向量）
+- **手动触发**：`POST /api/v1/admin/cleanup`
+- **预览**：`GET /api/v1/admin/cleanup/preview`
 
 ## 7. 前后端边界
 

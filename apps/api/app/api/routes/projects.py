@@ -40,3 +40,11 @@ def get_project(project_id: str) -> dict:
     if item is None:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     return {"item": item}
+
+
+@router.delete("/{project_id}")
+def delete_project(project_id: str) -> dict:
+    item = service.delete_project(project_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+    return {"item": item}

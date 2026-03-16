@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
 import type { KnowledgeGroup, KnowledgeSource, ProjectSummary, SourcePreview } from "@/lib/api";
 import {
@@ -54,6 +54,7 @@ export function KnowledgePageClient({
     setGroups(initialGroups);
   }, [initialGroups]);
 
+  // Sync showArchived with includeArchived prop
   useEffect(() => {
     setShowArchived(includeArchived);
   }, [includeArchived]);
@@ -81,7 +82,7 @@ export function KnowledgePageClient({
     ];
   }, [groups, projects, selectedProjectId]);
 
-  function applyFilters() {
+  const applyFilters = useCallback(() => {
     startTransition(() => {
       const params = new URLSearchParams();
       if (query.trim()) {
@@ -95,7 +96,15 @@ export function KnowledgePageClient({
       }
       router.push(`/knowledge${params.toString() ? `?${params.toString()}` : ""}`);
     });
-  }
+  }, [query, selectedProjectId, showArchived, router]);
+
+  // Auto-apply filters when showArchived changes (but not on initial mount)
+  useEffect(() => {
+    // Only apply if showArchived differs from the URL state (includeArchived)
+    if (showArchived !== includeArchived) {
+      applyFilters();
+    }
+  }, [showArchived, includeArchived, applyFilters]);
 
   async function openPreview(sourceId: string) {
     const item = await getSourcePreview(sourceId);

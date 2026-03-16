@@ -437,3 +437,108 @@ def test_field_chunks_are_ranked_ahead_of_plain_body_hits_for_field_queries(clie
     assert results[0]["section_type"] == "field"
     assert results[0]["field_label"] == "课题名称"
     assert "基于STM32的室内空气质量检测与智能控制系统设计" in results[0]["normalized_text"]
+
+
+def test_project_delete_soft_deletes_and_excludes_from_list(client):
+    """Test that project delete performs soft delete and excludes from default list."""
+    # 1. Create a project
+    project = _create_project(client, name="待删除项目")
+    project_id = project["id"]
+
+    # 2. Verify project exists and is active
+    get_response = client.get(f"/api/v1/projects/{project_id}")
+    assert get_response.status_code == 200, get_response.text
+    assert get_response.json()["item"]["status"] == "active"
+
+    # 3. Verify project appears in list
+    list_response = client.get("/api/v1/projects")
+    assert list_response.status_code == 200, list_response.text
+    project_ids = [p["id"] for p in list_response.json()["items"]]
+    assert project_id in project_ids
+
+    # 4. Delete the project
+    delete_response = client.delete(f"/api/v1/projects/{project_id}")
+    assert delete_response.status_code == 200, delete_response.text
+    deleted_project = delete_response.json()["item"]
+    assert deleted_project["status"] == "archived"
+    assert deleted_project["archived_at"] is not None
+
+    # 5. Verify project no longer appears in default list (include_archived=false)
+    list_after_delete = client.get("/api/v1/projects")
+    assert list_after_delete.status_code == 200, list_after_delete.text
+    project_ids_after = [p["id"] for p in list_after_delete.json()["items"]]
+    assert project_id not in project_ids_after
+
+    # 6. Verify project still exists when include_archived=true
+    list_with_archived = client.get("/api/v1/projects?include_archived=true")
+    assert list_with_archived.status_code == 200, list_with_archived.text
+    archived_ids = [p["id"] for p in list_with_archived.json()["items"]]
+    assert project_id in archived_ids
+
+    # 7. Verify get project still returns the archived project
+    get_after_delete = client.get(f"/api/v1/projects/{project_id}")
+    assert get_after_delete.status_code == 200, get_after_delete.text
+    assert get_after_delete.json()["item"]["status"] == "archived"
+
+
+def test_project_archived_project_sessions_and_sources_hidden_from_lists(client, html_server):
+    """Test that archived project's sessions and sources are hidden from all lists."""
+    # 1. Create project with session and source
+    project = _create_project(client, name="归档项目测试")
+    project_id = project["id"]
+
+    session = client.post(f"/api/v1/projects/{project_id}/sessions").json()["item"]
+    session_id = session["id"]
+
+    source_url = _create_html_source(
+        html_server,
+        "archive-test.html",
+        "<html><head><title>Archive Test</title></head><body><p>Archive test content.</p></body></html>",
+    )
+    source = client.post(
+        f"/api/v1/projects/{project_id}/sources/web",
+        json={"url": source_url},
+    ).json()["item"]
+    source_id = source["id"]
+
+    # 2. Verify session and source exist in project lists
+    sessions_list = client.get(f"/api/v1/projects/{project_id}/sessions").json()["items"]
+    assert any(s["id"] == session_id for s in sessions_list)
+
+    sources_list = client.get(f"/api/v1/projects/{project_id}/sources").json()["items"]
+    assert any(s["id"] == source_id for s in sources_list)
+
+    # 3. Archive (delete) the project
+    delete_response = client.delete(f"/api/v1/projects/{project_id}")
+    assert delete_response.status_code == 200, delete_response.text
+
+    # 4. Verify project is hidden from default list
+    list_response = client.get("/api/v1/projects").json()["items"]
+    assert not any(p["id"] == project_id for p in list_response)
+
+    # 5. Verify sessions and sources are hidden from project lists
+    sessions_after = client.get(f"/api/v1/projects/{project_id}/sessions").json()["items"]
+    assert not any(s["id"] == session_id for s in sessions_after)
+
+    sources_after = client.get(f"/api/v1/projects/{project_id}/sources").json()["items"]
+    assert not any(s["id"] == source_id for s in sources_after)
+
+    # 6. Verify sessions and sources are hidden from global lists
+    global_sessions = client.get("/api/v1/sessions").json()["groups"]
+    all_session_ids = []
+    for group in global_sessions:
+        all_session_ids.extend([s["id"] for s in group.get("sessions", [])])
+    assert session_id not in all_session_ids
+
+    global_sources_resp = client.get("/api/v1/knowledge").json()
+    all_source_ids = []
+    for group in global_sources_resp.get("groups", []):
+        all_source_ids.extend([s["id"] for s in group.get("items", [])])
+    assert source_id not in all_source_ids
+
+
+def test_project_delete_returns_404_for_nonexistent_project(client):
+    """Test that deleting a non-existent project returns 404."""
+    response = client.delete("/api/v1/projects/non-existent-project-id")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()

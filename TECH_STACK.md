@@ -153,7 +153,22 @@
 - `compileall`
 - 本地 retrieval eval runner
 
-## 8. 启动策略
+## 8. 数据清理
+
+### CleanupService
+
+自动清理超过 30 天的软删除数据：
+
+- **触发时机**：API 启动时异步执行
+- **清理对象**：
+  - 已归档项目（status='archived'）
+  - 已删除会话（deleted_at 不为空）
+  - 已删除来源（deleted_at 不为空）
+- **级联清理**：项目删除会级联清理所有关联数据（会话、消息、来源、chunks、Qdrant 向量）
+- **手动触发**：`POST /api/v1/admin/cleanup`
+- **预览接口**：`GET /api/v1/admin/cleanup/preview`
+
+## 9. 启动策略
 
 仓库根目录可直接运行：
 
@@ -166,7 +181,7 @@
 - Web：`http://127.0.0.1:3000`
 - API：`http://127.0.0.1:8010`
 
-## 9. 版本演进摘要
+## 10. 版本演进摘要
 
 ### V2
 
@@ -190,3 +205,10 @@
 - 独立 reranker
 - retrieval index version
 - 默认聊天低延迟优化
+
+### V5
+
+- 软删除 + CleanupService（自动清理过期数据）
+- 项目删除功能
+- 统一深色主题 UI
+- `项目 / 会话 / 消息 / 知识库 / 来源` 完整链路

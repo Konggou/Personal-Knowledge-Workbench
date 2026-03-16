@@ -198,6 +198,7 @@ class SourceRepository:
                 JOIN projects p ON p.id = s.project_id
                 WHERE s.project_id = ?
                   AND s.deleted_at IS NULL
+                  AND p.status != 'archived'
             """
             if not include_archived:
                 sql += " AND s.ingestion_status != 'archived'"
@@ -234,6 +235,7 @@ class SourceRepository:
                 FROM sources s
                 JOIN projects p ON p.id = s.project_id
                 WHERE s.deleted_at IS NULL
+                  AND p.status != 'archived'
             """
             params: list[object] = []
             if project_id is not None:

@@ -10,6 +10,7 @@ from app.services.search_service import SearchService
 
 NORMAL_GROUNDED_EVIDENCE_LIMIT = 3
 RESEARCH_GROUNDED_EVIDENCE_LIMIT = 5
+FACTOID_GROUNDED_EVIDENCE_LIMIT = 2
 EVIDENCE_SELECTION_MULTIPLIER = 2
 MAX_COMPRESSED_EXCERPT_LENGTH = 280
 MIN_ACCEPTED_TOP_SCORE = 2.2
@@ -43,7 +44,7 @@ class GroundedGenerationService:
         history: list[dict] | None = None,
     ) -> list[dict]:
         apply_rerank = True if research_mode else self.search.should_rerank_query(query)
-        final_limit = RESEARCH_GROUNDED_EVIDENCE_LIMIT if research_mode else NORMAL_GROUNDED_EVIDENCE_LIMIT
+        final_limit = self._target_evidence_limit(query=query, research_mode=research_mode)
         retrieval_limit = max(final_limit * EVIDENCE_SELECTION_MULTIPLIER, final_limit + 2)
         retrieved, diagnostics = self.search.retrieve_project_evidence_with_diagnostics(
             project_id,
@@ -137,7 +138,7 @@ class GroundedGenerationService:
         research_mode: bool,
         external_hits: list[dict] | None = None,
     ) -> tuple[list[dict], dict]:
-        final_limit = RESEARCH_GROUNDED_EVIDENCE_LIMIT if research_mode else NORMAL_GROUNDED_EVIDENCE_LIMIT
+        final_limit = self._target_evidence_limit(query=query, research_mode=research_mode)
         accepted_project_hits = project_hits
         selection_diagnostics: dict
         compression_diagnostics: dict
@@ -268,11 +269,13 @@ class GroundedGenerationService:
         compressed_items: list[dict] = []
         for index, item in enumerate(evidences, start=1):
             compressed_excerpt, compression_reason = self._compress_evidence_excerpt(query=query, item=item)
+            llm_excerpt = self._build_llm_excerpt(query=query, item=item, compressed_excerpt=compressed_excerpt)
             packed.append(
                 {
                     **item,
                     "excerpt": compressed_excerpt,
                     "source_excerpt": item.get("excerpt", ""),
+                    "llm_excerpt": llm_excerpt,
                     "compression_reason": compression_reason,
                     "evidence_index": index,
                 }
@@ -284,6 +287,7 @@ class GroundedGenerationService:
                     "compression_reason": compression_reason,
                     "original_excerpt_length": len(item.get("excerpt", "")),
                     "compressed_excerpt_length": len(compressed_excerpt),
+                    "llm_excerpt_length": len(llm_excerpt),
                 }
             )
         return (
@@ -503,11 +507,11 @@ class GroundedGenerationService:
 
         section_type = str(item.get("section_type") or "body")
         if section_type in {"field", "proposition"}:
-            return self._trim_excerpt(normalized_text), section_type
+            return self._trim_excerpt(normalized_text, max_length=self._excerpt_character_limit(query=query, item=item)), section_type
 
         sentences = self._split_sentences(normalized_text)
         if not sentences:
-            return self._trim_excerpt(normalized_text), "raw_excerpt"
+            return self._trim_excerpt(normalized_text, max_length=self._excerpt_character_limit(query=query, item=item)), "raw_excerpt"
 
         scored_sentences = [
             (
@@ -524,16 +528,17 @@ class GroundedGenerationService:
             if score <= 0 and selected:
                 continue
             sentence_length = len(sentence)
-            if selected and total_length + sentence_length + 1 > MAX_COMPRESSED_EXCERPT_LENGTH:
+            max_length = self._excerpt_character_limit(query=query, item=item)
+            if selected and total_length + sentence_length + 1 > max_length:
                 continue
             selected.append(sentence)
             total_length += sentence_length + 1
-            if len(selected) >= 2:
+            if len(selected) >= self._target_sentence_count(query=query, item=item):
                 break
 
         if not selected:
-            return self._trim_excerpt(normalized_text), "raw_excerpt"
-        return self._trim_excerpt(" ".join(selected)), "sentence_focus"
+            return self._trim_excerpt(normalized_text, max_length=self._excerpt_character_limit(query=query, item=item)), "raw_excerpt"
+        return self._trim_excerpt(" ".join(selected), max_length=self._excerpt_character_limit(query=query, item=item)), "sentence_focus"
 
     def _sentence_relevance(self, *, query: str, sentence: str, item: dict) -> float:
         terms = [term for term in self.search.repository.build_query_terms(query) if len(term) >= 2]
@@ -566,11 +571,106 @@ class GroundedGenerationService:
             sentences.append(sentence)
         return sentences
 
-    def _trim_excerpt(self, text: str) -> str:
+    def _trim_excerpt(self, text: str, *, max_length: int = MAX_COMPRESSED_EXCERPT_LENGTH) -> str:
         normalized = " ".join(text.split()).strip()
-        if len(normalized) <= MAX_COMPRESSED_EXCERPT_LENGTH:
+        if len(normalized) <= max_length:
             return normalized
-        return f"{normalized[: MAX_COMPRESSED_EXCERPT_LENGTH - 1].rstrip()}…"
+        return f"{normalized[: max_length - 1].rstrip()}…"
+
+    def _build_llm_excerpt(self, *, query: str, item: dict, compressed_excerpt: str) -> str:
+        section_type = str(item.get("section_type") or "body")
+        field_label = " ".join(str(item.get("field_label") or "").split()).strip()
+        if section_type == "field" and field_label:
+            if compressed_excerpt.startswith(field_label):
+                return self._trim_excerpt(compressed_excerpt, max_length=140)
+            return self._trim_excerpt(f"{field_label}: {compressed_excerpt}", max_length=140)
+        return self._trim_excerpt(compressed_excerpt, max_length=self._llm_excerpt_character_limit(query=query, item=item))
+
+    def _target_evidence_limit(self, *, query: str, research_mode: bool) -> int:
+        if research_mode:
+            return RESEARCH_GROUNDED_EVIDENCE_LIMIT
+        if self._query_looks_factoid(query) and not self.search.should_rerank_query(query):
+            return FACTOID_GROUNDED_EVIDENCE_LIMIT
+        return NORMAL_GROUNDED_EVIDENCE_LIMIT
+
+    def _target_sentence_count(self, *, query: str, item: dict) -> int:
+        if str(item.get("section_type") or "body") in {"field", "proposition"}:
+            return 1
+        if self._query_looks_factoid(query):
+            return 1
+        return 2
+
+    def _excerpt_character_limit(self, *, query: str, item: dict) -> int:
+        section_type = str(item.get("section_type") or "body")
+        if section_type == "field":
+            return 120
+        if section_type == "proposition":
+            return 150
+        if self._query_looks_factoid(query):
+            return 160
+        return 220
+
+    def _llm_excerpt_character_limit(self, *, query: str, item: dict) -> int:
+        if str(item.get("section_type") or "body") in {"field", "proposition"}:
+            return 140
+        if self._query_looks_factoid(query):
+            return 130
+        return 180
+
+    def _query_looks_factoid(self, query: str) -> bool:
+        normalized = " ".join(query.split()).lower()
+        if not normalized:
+            return False
+
+        complex_markers = (
+            "\u4e3a\u4ec0\u4e48",
+            "\u4e3a\u4f55",
+            "\u539f\u56e0",
+            "\u5982\u4f55",
+            "\u600e\u4e48",
+            "\u600e\u6837",
+            "\u6bd4\u8f83",
+            "\u533a\u522b",
+            "\u5dee\u5f02",
+            "\u4f18\u7f3a\u70b9",
+            "\u53ef\u884c",
+            "\u5efa\u8bae",
+            "\u5206\u6790",
+            "\u603b\u7ed3",
+            "\u89e3\u91ca",
+            "\u65b9\u6848",
+            "\u601d\u8def",
+        )
+        if any(marker in normalized for marker in complex_markers):
+            return False
+
+        strong_factoid_markers = (
+            "\u540d\u79f0",
+            "\u9898\u76ee",
+            "\u6807\u9898",
+            "\u4f5c\u8005",
+            "\u65f6\u95f4",
+            "\u65e5\u671f",
+            "\u9ed8\u8ba4",
+            "\u7248\u672c",
+            "\u7f16\u53f7",
+            "\u5730\u5740",
+            "\u5730\u70b9",
+            "\u4f4d\u7f6e",
+            "\u8c01",
+            "\u4f55\u65f6",
+            "\u54ea\u91cc",
+            "\u591a\u5c11",
+            "\u54ea\u4e2a",
+            "\u54ea\u79cd",
+        )
+        if any(marker in normalized for marker in strong_factoid_markers):
+            return True
+
+        if "\u4ec0\u4e48" in normalized:
+            return len(normalized) <= 12 and "\u4ec0\u4e48\u662f" not in normalized
+
+        return False
 
     def _build_answer_payload(self, *, grounded: dict, research_mode: bool) -> dict:
         return {

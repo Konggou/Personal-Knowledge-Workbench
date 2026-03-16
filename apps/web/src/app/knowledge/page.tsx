@@ -18,7 +18,7 @@ export default async function KnowledgePage({ searchParams }: KnowledgePageProps
 
   const [groups, projects] = await Promise.all([
     listKnowledge({ query, projectId, includeArchived }),
-    listProjects({ includeArchived: true }),
+    listProjects({ includeArchived: false }),
   ]);
 
   return (

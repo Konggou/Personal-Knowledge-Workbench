@@ -297,6 +297,42 @@ def test_grounded_json_parser_normalizes_inline_numbered_list():
     assert parsed["answer_md"] == "1. 第一项\n2. 第二项\n3. 第三项"
 
 
+def test_grounded_completion_budget_prefers_tighter_factoid_limit():
+    service = LLMService()
+    factoid_conversation = [{"message_type": "user_prompt", "content_md": "项目名称是什么？"}]
+    complex_conversation = [{"message_type": "user_prompt", "content_md": "为什么这个方案可行？"}]
+
+    assert service._grounded_completion_budget(conversation=factoid_conversation, research_mode=False) == 96
+    assert service._grounded_completion_budget(conversation=complex_conversation, research_mode=False) == 220
+    assert service._grounded_completion_budget(conversation=complex_conversation, research_mode=True) == 360
+
+
+def test_build_grounded_messages_restored_and_guides_factoid_brevity():
+    service = LLMService()
+    messages = service._build_grounded_messages(
+        conversation=[{"message_type": "user_prompt", "content_md": "项目名称是什么？"}],
+        evidence_pack=[
+            {
+                "evidence_index": 1,
+                "source_title": "Spec",
+                "location_label": "项目名称 #1",
+                "excerpt": "项目名称：室内空气质量检测与智能控制系统。",
+                "llm_excerpt": "项目名称：室内空气质量检测与智能控制系统。",
+                "source_kind": "project_source",
+                "heading_path": "基础信息",
+                "field_label": "项目名称",
+            }
+        ],
+        research_mode=False,
+        context_notes=["这是项目基础信息"],
+    )
+
+    assert messages[0]["role"] == "system"
+    assert messages[-1]["role"] == "user"
+    assert "事实题尽量用一句话完成回答" in messages[-1]["content"]
+    assert "excerpt: 项目名称：室内空气质量检测与智能控制系统。" in messages[-1]["content"]
+
+
 def test_search_service_uses_conditional_hyde_when_first_pass_is_weak(monkeypatch):
     service = SearchService(llm_service=sessions_route_service.llm)
     calls: list[str] = []
@@ -801,6 +837,134 @@ def test_grounded_generation_compresses_selected_evidence_and_augments_diagnosti
     assert augmented["selection"]["selector_applied"] is True
     assert augmented["compression"]["compressed_evidence_count"] == 3
     assert augmented["final"]["selected_evidence_count"] == 3
+
+
+def test_grounded_generation_factoid_uses_tighter_evidence_budget(monkeypatch):
+    grounded_generation = sessions_route_service.grounded_generation
+    evidence = [
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": f"chunk-{index}",
+            "source_id": f"source-{index}",
+            "source_kind": "project_source",
+            "source_title": f"Spec {index}",
+            "source_type": "file_docx",
+            "canonical_uri": f"file:///spec-{index}.docx",
+            "location_label": f"Field #{index}",
+            "excerpt": f"项目名称：室内空气质量检测系统 {index}",
+            "normalized_text": f"项目名称：室内空气质量检测系统 {index}",
+            "relevance_score": round(4.6 - (index * 0.1), 3),
+            "section_type": "field",
+            "heading_path": "基础信息",
+            "field_label": "项目名称",
+            "table_origin": None,
+            "proposition_type": "identity",
+        }
+        for index in range(1, 4)
+    ]
+    diagnostics = {
+        "original_query": "项目名称是什么？",
+        "context_clues": [],
+        "first_pass": {
+            "hit_count": len(evidence),
+            "top_score": 4.5,
+            "title_hit_count": 1,
+            "field_hit_count": 2,
+            "term_coverage_ratio": 1.0,
+            "is_low_confidence": False,
+        },
+        "triggered_second_pass": False,
+        "retry_steps": [],
+        "final": {
+            "hit_count": len(evidence),
+            "source_count": 3,
+            "grounded_candidate": True,
+            "returned_hit_count": len(evidence),
+        },
+    }
+
+    monkeypatch.setattr(
+        grounded_generation.search,
+        "retrieve_project_evidence_with_diagnostics",
+        lambda *args, **kwargs: (evidence, diagnostics),
+    )
+
+    packed = grounded_generation.retrieve_evidence(
+        project_id="project-1",
+        query="项目名称是什么？",
+        research_mode=False,
+        history=None,
+    )
+
+    assert len(packed) == 2
+    assert grounded_generation.last_retrieval_diagnostics["final"]["selected_evidence_count"] == 2
+
+
+def test_grounded_generation_builds_shorter_llm_excerpt_for_factoid():
+    grounded_generation = sessions_route_service.grounded_generation
+    project_hits = [
+        {
+            "project_id": "project-1",
+            "project_name": "Grounded Project",
+            "chunk_id": "chunk-field",
+            "source_id": "source-1",
+            "source_kind": "project_source",
+            "source_title": "Spec",
+            "source_type": "file_docx",
+            "canonical_uri": "file:///spec.docx",
+            "location_label": "项目名称 #1",
+            "excerpt": "项目名称：室内空气质量检测系统，系统由采集模块、控制模块、显示模块和告警模块组成。",
+            "normalized_text": "项目名称：室内空气质量检测系统，系统由采集模块、控制模块、显示模块和告警模块组成。",
+            "relevance_score": 4.5,
+            "section_type": "field",
+            "heading_path": "基础信息",
+            "field_label": "项目名称",
+            "table_origin": None,
+            "proposition_type": "identity",
+        }
+    ]
+    diagnostics = {
+        "original_query": "项目名称是什么？",
+        "context_clues": [],
+        "first_pass": {
+            "hit_count": 1,
+            "top_score": 4.5,
+            "title_hit_count": 1,
+            "field_hit_count": 1,
+            "term_coverage_ratio": 1.0,
+            "is_low_confidence": False,
+        },
+        "triggered_second_pass": False,
+        "retry_steps": [],
+        "final": {
+            "hit_count": 1,
+            "source_count": 1,
+            "grounded_candidate": True,
+            "returned_hit_count": 1,
+        },
+    }
+
+    packed, _ = grounded_generation.prepare_agent_evidence(
+        query="项目名称是什么？",
+        project_hits=project_hits,
+        project_diagnostics=diagnostics,
+        research_mode=False,
+    )
+
+    assert packed
+    assert "项目名称" in packed[0]["llm_excerpt"]
+    assert len(packed[0]["llm_excerpt"]) <= len(packed[0]["source_excerpt"])
+
+
+def test_explanation_queries_are_not_treated_as_factoid():
+    grounded_generation = sessions_route_service.grounded_generation
+    llm = LLMService()
+    query = "\u4e3a\u4ec0\u4e48\u8fd9\u4e2a\u65b9\u6848\u53ef\u884c\uff1f"
+
+    assert grounded_generation._query_looks_factoid(query) is False
+    assert grounded_generation._target_evidence_limit(query=query, research_mode=False) == 3
+    assert llm._query_looks_factoid(query) is False
 
 
 def test_grounded_generation_rejects_low_confidence_second_pass_false_positives(monkeypatch):

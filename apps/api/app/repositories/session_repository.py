@@ -105,6 +105,7 @@ class SessionRepository:
                 JOIN projects p ON p.id = s.project_id
                 WHERE s.project_id = ?
                   AND s.deleted_at IS NULL
+                  AND p.status != 'archived'
                 ORDER BY COALESCE(s.latest_message_at, s.created_at) DESC, s.created_at DESC
                 """,
                 (project_id,),
@@ -138,6 +139,7 @@ class SessionRepository:
                 FROM sessions s
                 JOIN projects p ON p.id = s.project_id
                 WHERE s.deleted_at IS NULL
+                  AND p.status != 'archived'
                 ORDER BY p.last_activity_at DESC, COALESCE(s.latest_message_at, s.created_at) DESC
                 """,
             ).fetchall()

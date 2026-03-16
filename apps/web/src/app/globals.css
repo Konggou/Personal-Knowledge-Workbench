@@ -1,29 +1,97 @@
+/* ==========================================================================
+   个人知识工作台 - 学术编辑室主题 (Dark Immersive + Editorial)
+   ========================================================================== */
+
+/* 
+ * 字体引入
+ * Display: DM Serif Display - 学术编辑感衬线标题
+ * Body: Instrument Sans - 人文无衬线正文
+ * Mono: JetBrains Mono - 代码与技术内容
+ */
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ==========================================================================
+   CSS Variables - 深墨沉浸主题
+   ========================================================================== */
 :root {
-  --bg-canvas: #f6f3ee;
-  --bg-surface: #fffcf7;
-  --bg-elevated: #ffffff;
-  --border-subtle: #e7e0d6;
-  --border-strong: #d2c7b8;
-  --text-primary: #182230;
-  --text-secondary: #344054;
-  --text-tertiary: #667085;
-  --text-muted: #98a2b3;
-  --accent-primary: #1f5c57;
-  --accent-primary-hover: #174944;
-  --accent-soft: #d8ece9;
-  --accent-link: #215fa6;
-  --warning-bg: #fff3d6;
-  --warning-text: #8a5a00;
-  --danger-bg: #fee4e2;
-  --danger-text: #b42318;
-  --success-bg: #e8f5ec;
-  --success-text: #166534;
-  --shadow-soft: 0 8px 24px rgba(16, 24, 40, 0.06);
-  --shadow-raised: 0 12px 32px rgba(16, 24, 40, 0.1);
+  /* 画布层级 - 深墨底 */
+  --bg-canvas: #0a0c0f;
+  --bg-canvas-subtle: #0f1419;
+  --bg-surface: #14181f;
+  --bg-surface-elevated: #1a1f28;
+  --bg-elevated: #222830;
+  
+  /* 边框 - 微妙的层级感 */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-accent: rgba(255, 255, 255, 0.18);
+  
+  /* 文字 - 羊皮纸质感 */
+  --text-primary: #f5f0e6;
+  --text-secondary: #d4cbb8;
+  --text-tertiary: #a69b8a;
+  --text-muted: #7a7163;
+  
+  /* 强调色 - 暖琥珀 */
+  --accent-primary: #e6a845;
+  --accent-primary-hover: #f0b856;
+  --accent-soft: rgba(230, 168, 69, 0.12);
+  --accent-glow: rgba(230, 168, 69, 0.24);
+  
+  /* 功能色 */
+  --accent-link: #7eb8da;
+  --warning-bg: rgba(230, 168, 69, 0.1);
+  --warning-text: #e6a845;
+  --danger-bg: rgba(220, 90, 90, 0.1);
+  --danger-text: #dc7a7a;
+  --success-bg: rgba(100, 180, 120, 0.1);
+  --success-text: #7dbd8e;
+  
+  /* 阴影 - 深墨中的微光 */
+  --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-raised: 0 12px 48px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 40px rgba(230, 168, 69, 0.08);
+  
+  /* 字体 */
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'Instrument Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  
+  /* 圆角 - 更克制的编辑感 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 28px;
+  --radius-full: 999px;
+  
+  /* 间距系统 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  
+  /* 动画 */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-sine: cubic-bezier(0.37, 0, 0.63, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
 }
 
+/* ==========================================================================
+   Base Reset
+   ========================================================================== */
 * {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 html,
@@ -31,21 +99,229 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
   background: var(--bg-canvas);
   color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-body {
-  line-height: 1.5;
+/* 选中文本样式 */
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-primary);
 }
 
+/* 滚动条 - 极简暗色 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ==========================================================================
+   Typography - 编辑式排版
+   ========================================================================== */
+
+/* 标题衬线体 */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 2.75rem;
+}
+
+h2 {
+  font-size: 2rem;
+}
+
+h3 {
+  font-size: 1.5rem;
+}
+
+/* 正文 */
+p {
+  margin: 0 0 1em;
+}
+
+/* 链接 */
 a {
   color: var(--accent-link);
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-out-expo);
 }
 
+a:hover {
+  color: var(--accent-primary);
+}
+
+/* 表单元素 */
 button,
 input,
 textarea {
-  font: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Placeholder 颜色 */
+::placeholder {
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input,
+textarea {
+  border: none;
+  background: transparent;
+  outline: none;
+}
+
+textarea {
+  resize: none;
+}
+
+/* ==========================================================================
+   Animation Keyframes
+   ========================================================================== */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px var(--accent-glow);
+  }
+}
+
+@keyframes typing-dot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+
+.animate-fade-in-up {
+  animation: fadeInUp var(--duration-slow) var(--ease-out-expo) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--duration-base) var(--ease-out-expo) forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight var(--duration-slow) var(--ease-out-expo) forwards;
+}
+
+/* 编辑式 Eyebrow 标签 */
+.eyebrow {
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+  margin: 0 0 var(--space-3);
+}
+
+/* 玻璃拟态效果 */
+.glass {
+  background: rgba(20, 24, 31, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+}
+
+/* 微光晕按钮 */
+.glow-button {
+  position: relative;
+  transition: all var(--duration-base) var(--ease-out-expo);
+}
+
+.glow-button::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--accent-primary), transparent 60%);
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out-expo);
+}
+
+.glow-button:hover::before {
+  opacity: 1;
+}
+
+.glow-button:hover {
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
 }

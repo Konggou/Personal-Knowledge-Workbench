@@ -241,3 +241,29 @@ class ProjectRepository:
             connection.commit()
         finally:
             connection.close()
+
+    def delete_project(self, project_id: str) -> ProjectRecord | None:
+        """Soft delete a project by setting status to 'archived' and archived_at timestamp.
+        
+        Returns None if project doesn't exist or is already archived.
+        """
+        now = datetime.now(UTC).isoformat()
+        connection = get_connection()
+        try:
+            # Check if project exists and is not already archived
+            existing = self.get_project(project_id)
+            if existing is None or existing.status == "archived":
+                return None
+
+            connection.execute(
+                """
+                UPDATE projects
+                SET status = 'archived', updated_at = ?, archived_at = ?
+                WHERE id = ? AND status != 'archived'
+                """,
+                (now, now, project_id),
+            )
+            connection.commit()
+            return self.get_project(project_id)
+        finally:
+            connection.close()
