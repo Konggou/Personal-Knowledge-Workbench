@@ -7,6 +7,7 @@
     "build:web": "corepack pnpm --dir apps/web build",
     "typecheck:web": "corepack pnpm --dir apps/web typecheck",
     "test:web": "corepack pnpm --dir apps/web test",
-    "test:e2e": "corepack pnpm --dir apps/web test:e2e"
+    "test:e2e": "corepack pnpm --dir apps/web test:e2e",
+    "skills:sync": "powershell -ExecutionPolicy Bypass -File ./scripts/sync-codex-skills.ps1"
   }
 }
