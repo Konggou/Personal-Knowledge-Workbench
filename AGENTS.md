@@ -97,7 +97,8 @@
 
 - 聊天优先
 - 中间聊天区主导
-- 暖色工作底
+- Academic Editorial 深色主题
+- 暖金色强调 (#e6a845)
 - 轻分隔线
 - 少卡片、少阴影、少并排大面板
 
@@ -106,6 +107,13 @@
 - 顶部轻导航
 - 左侧项目树 sidebar
 - 中间聊天主区
+
+颜色系统：
+- Canvas: #0a0c0f (最深背景)
+- Surface: #111419 (卡片背景)
+- Text Primary: #f0f0f0
+- Text Secondary: #9ca3af
+- Accent: #e6a845 (金色强调)
 
 # Frontend Rules
 

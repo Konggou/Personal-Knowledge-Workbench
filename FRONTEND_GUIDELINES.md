@@ -13,36 +13,51 @@
 整体气质：
 
 - 参考 Claude / Codex 这类聊天产品的空间分配
-- 保留暖色底和柔和工作氛围
+- 深色学术编辑风格，营造专注阅读氛围
 - 不做机械复制
 
 ## 2. 视觉 Token
 
-### 颜色
+### 颜色（Academic Editorial Dark Theme）
 
-- `--bg-canvas: #f6f3ee`
-- `--bg-surface: #fffcf7`
-- `--bg-elevated: #ffffff`
-- `--border-subtle: #e7e0d6`
-- `--border-strong: #d2c7b8`
-- `--text-primary: #182230`
-- `--text-secondary: #344054`
-- `--text-tertiary: #667085`
-- `--accent-primary: #1f5c57`
-- `--accent-primary-hover: #174944`
-- `--accent-soft: #d8ece9`
-- `--warning-bg: #fff3d6`
-- `--warning-text: #8a5a00`
+背景色阶：
+- `--bg-canvas: #0a0c0f` - 最深背景（页面底层）
+- `--bg-surface: #111419` - 卡片/表面背景
+- `--bg-elevated: #181b21` -  elevated 表面
+- `--bg-overlay: #1e2229` - 覆盖层/弹窗背景
+
+边框色阶：
+- `--border-subtle: rgba(255, 255, 255, 0.06)` - 极轻边框
+- `--border-default: rgba(255, 255, 255, 0.1)` - 默认边框
+- `--border-strong: rgba(255, 255, 255, 0.15)` - 强调边框
+
+文字色阶：
+- `--text-primary: #f0f0f0` - 主要文字
+- `--text-secondary: #9ca3af` - 次要文字
+- `--text-tertiary: #6b7280` - 辅助文字
+
+强调色：
+- `--accent-primary: #e6a845` - 金色强调（按钮、链接）
+- `--accent-primary-hover: #f0b856` - 悬停状态
+- `--accent-soft: rgba(230, 168, 69, 0.15)` - 柔和强调背景
+
+语义色：
+- `--warning-bg: rgba(230, 168, 69, 0.12)`
+- `--warning-text: #e6a845`
+- `--error-text: #ef4444`
+- `--success-text: #22c55e`
 
 ### 阴影
 
-- `--shadow-soft: 0 8px 24px rgba(16, 24, 40, 0.06)`
-- `--shadow-raised: 0 12px 32px rgba(16, 24, 40, 0.1)`
+深色主题阴影：
+- `--shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.4)`
+- `--shadow-raised: 0 12px 32px rgba(0, 0, 0, 0.5)`
 
 ### 字体
 
-- 主字体：`IBM Plex Sans`
-- 回退：`Segoe UI`, `sans-serif`
+- 标题字体：`DM Serif Display`
+- 正文字体：`Instrument Sans`
+- 回退：`Georgia`, `Segoe UI`, `sans-serif`
 
 ### 圆角
 

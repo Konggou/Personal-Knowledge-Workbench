@@ -193,6 +193,23 @@ V4 已落地
 - 继续清理根目录主文档的历史编码与历史命名残留
 - 继续根据真实使用反馈打磨项目聊天页与来源层体验
 
+文档梳理（2026-03-17）
+- 更新 FRONTEND_GUIDELINES.md：
+  - 更新为 Academic Editorial 深色主题色值
+  - 更新字体为 DM Serif Display + Instrument Sans
+  - 新增完整的颜色系统说明
+- 更新 AGENTS.md：
+  - 更新 Design System Summary 为深色主题
+  - 添加颜色系统速查
+- 更新 APP_FLOW.md：
+  - 添加流程 11：删除项目
+  - 更新工作台页面职责说明
+- 更新 PRD.md：
+  - 添加删除项目到核心用户动作
+- 更新 IMPLEMENTATION_PLAN.md：
+  - 更新当前阶段判断，标记 V5 完成
+  - 添加第 12 节 V5 项目生命周期与视觉统一
+
 维护规则
 - 每完成一个功能切片，都要更新本文件
 - 标记完成前，先做 review 风格检查
