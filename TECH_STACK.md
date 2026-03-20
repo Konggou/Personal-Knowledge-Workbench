@@ -191,14 +191,14 @@
 - evidence selection
 - retrieval eval
 
-### V3
+### 当前运行时能力
 
 - 聊天优先 Agent 运行时
 - `联网补充`
 - memory entries
 - external web evidence
 
-### V4
+### 当前检索能力
 
 - `FTS5 + bm25`
 - `RRF`
@@ -206,7 +206,7 @@
 - retrieval index version
 - 默认聊天低延迟优化
 
-### V5
+### 当前产品能力
 
 - 软删除 + CleanupService（自动清理过期数据）
 - 项目删除功能

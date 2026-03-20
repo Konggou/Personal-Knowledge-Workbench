@@ -21,6 +21,7 @@ import {
   renameSession,
   streamSessionMessage,
 } from "@/lib/api";
+import { isSupportedFileName, normalizeSourceError, renderPreviewChunkContext } from "@/lib/source-utils";
 
 import styles from "./project-chat-client.module.css";
 
@@ -160,6 +161,50 @@ export function ProjectChatClient({
     return next;
   }
 
+  async function refreshProjectView(sessionId: string) {
+    const [, nextSession] = await Promise.all([refreshProjectSources(), refreshSelectedSession(sessionId)]);
+    return nextSession;
+  }
+
+  function appendStreamingMessages(userMessage: ChatMessage, assistantMessage: ChatMessage) {
+    setSelectedSession((previous) =>
+      previous
+        ? {
+            ...previous,
+            messages: [...previous.messages, userMessage, assistantMessage],
+            message_count: previous.message_count + 2,
+          }
+        : previous,
+    );
+  }
+
+  function appendStatusMessage(message: ChatMessage) {
+    setSelectedSession((previous) =>
+      previous
+        ? {
+            ...previous,
+            messages: [...previous.messages, message],
+            message_count: previous.message_count + 1,
+          }
+        : previous,
+    );
+  }
+
+  function updateMessage(messageId: string, updater: (message: ChatMessage) => ChatMessage) {
+    setSelectedSession((previous) =>
+      previous
+        ? {
+            ...previous,
+            messages: previous.messages.map((item) => (item.id === messageId ? updater(item) : item)),
+          }
+        : previous,
+    );
+  }
+
+  function replaceMessage(messageId: string, nextMessage: ChatMessage) {
+    updateMessage(messageId, () => nextMessage);
+  }
+
   async function handleCreateSession() {
     const session = await createSession(project.id);
     upsertProjectSessions(project.id, [session, ...currentProjectSessions].sort(sortSessions));
@@ -251,15 +296,7 @@ export function ProjectChatClient({
       supportsReport: true,
     });
 
-    setSelectedSession((previous) =>
-      previous
-        ? {
-            ...previous,
-            messages: [...previous.messages, tempUserMessage, tempAssistantMessage],
-            message_count: previous.message_count + 2,
-          }
-        : previous,
-    );
+    appendStreamingMessages(tempUserMessage, tempAssistantMessage);
     setMessage("");
     setDeepResearch(false);
     setWebBrowsing(false);
@@ -278,102 +315,40 @@ export function ProjectChatClient({
         {
           onEvent: (event) => {
             if (event.event === "delta") {
-              setSelectedSession((previous) =>
-                previous
-                  ? {
-                      ...previous,
-                      messages: previous.messages.map((item) =>
-                        item.id === tempAssistantMessage.id
-                          ? { ...item, content_md: `${item.content_md}${event.data.delta}` }
-                          : item,
-                      ),
-                    }
-                  : previous,
-              );
+              updateMessage(tempAssistantMessage.id, (item) => ({
+                ...item,
+                content_md: `${item.content_md}${event.data.delta}`,
+              }));
               return;
             }
 
             if (event.event === "status") {
-              setSelectedSession((previous) =>
-                previous
-                  ? {
-                      ...previous,
-                      messages: [...previous.messages, event.data.message],
-                      message_count: previous.message_count + 1,
-                    }
-                  : previous,
-              );
+              appendStatusMessage(event.data.message);
               return;
             }
 
             if (event.event === "done") {
-              setSelectedSession((previous) =>
-                previous
-                  ? {
-                      ...previous,
-                      messages: previous.messages.map((item) =>
-                        item.id === tempAssistantMessage.id ? event.data.message : item,
-                      ),
-                    }
-                  : previous,
-              );
+              replaceMessage(tempAssistantMessage.id, event.data.message);
               return;
             }
 
             streamFailed = true;
-            setSelectedSession((previous) =>
-              previous
-                ? {
-                    ...previous,
-                    messages: previous.messages.map((item) =>
-                      item.id === tempAssistantMessage.id
-                        ? {
-                            ...item,
-                            content_md: event.data.message || "生成回复失败，请稍后重试。",
-                          }
-                        : item,
-                    ),
-                  }
-                : previous,
-            );
+            updateMessage(tempAssistantMessage.id, (item) => ({
+              ...item,
+              content_md: event.data.message || "生成回复失败，请稍后重试。",
+            }));
           },
         },
       );
 
       if (!streamFailed) {
-        const next = await refreshSelectedSession(sessionId);
-        const nextSessions = currentProjectSessions
-          .map((item) =>
-            item.id === next.id
-              ? {
-                  ...item,
-                  title: next.title,
-                  title_source: next.title_source,
-                  message_count: next.message_count,
-                  latest_message_at: next.latest_message_at,
-                  updated_at: next.updated_at,
-                }
-              : item,
-          )
-          .sort(sortSessions);
-        upsertProjectSessions(project.id, nextSessions);
+        await refreshSelectedSession(sessionId);
       }
     } catch (caught) {
-      setSelectedSession((previous) =>
-        previous
-          ? {
-              ...previous,
-              messages: previous.messages.map((item) =>
-                item.id === tempAssistantMessage.id
-                  ? {
-                      ...item,
-                      content_md: caught instanceof Error ? caught.message : "发送消息失败，请稍后重试。",
-                    }
-                  : item,
-              ),
-            }
-          : previous,
-      );
+      updateMessage(tempAssistantMessage.id, (item) => ({
+        ...item,
+        content_md: caught instanceof Error ? caught.message : "发送消息失败，请稍后重试。",
+      }));
     } finally {
       setIsStreamingMessage(false);
     }
@@ -439,8 +414,7 @@ export function ProjectChatClient({
         [savedSource.canonical_uri]: true,
       }));
       setSourceNotice("已保存到知识库，可继续追问新资料。");
-      await refreshProjectSources();
-      await refreshSelectedSession(selectedSession.id);
+      await refreshProjectView(selectedSession.id);
     } catch (caught) {
       setSourceError(caught instanceof Error ? normalizeSourceError(caught.message) : "保存网页资料失败，请稍后重试。");
     }
@@ -462,8 +436,7 @@ export function ProjectChatClient({
       setShowWebForm(false);
       setShowAddSourceMenu(false);
       setSourceNotice("已添加网页资料。");
-      await refreshProjectSources();
-      await refreshSelectedSession(selectedSession.id);
+      await refreshProjectView(selectedSession.id);
     } catch (caught) {
       setSourceError(caught instanceof Error ? normalizeSourceError(caught.message) : "添加网页资料失败，请稍后重试。");
     }
@@ -488,8 +461,7 @@ export function ProjectChatClient({
       });
       setShowAddSourceMenu(false);
       setSourceNotice("已添加文件资料。");
-      await refreshProjectSources();
-      await refreshSelectedSession(selectedSession.id);
+      await refreshProjectView(selectedSession.id);
     } catch (caught) {
       setSourceError(caught instanceof Error ? normalizeSourceError(caught.message) : "添加文件资料失败，请稍后重试。");
     }
@@ -1037,23 +1009,6 @@ function createTemporaryMessage(input: {
     deleted_at: null,
     sources: [],
   };
-}
-
-function isSupportedFileName(name: string) {
-  const lower = name.toLowerCase();
-  return lower.endsWith(".pdf") || lower.endsWith(".docx");
-}
-
-function normalizeSourceError(message: string) {
-  if (message.includes("Unsupported file type")) {
-    return "当前仅支持 PDF 和 DOCX 文件，暂不支持旧版 DOC 文件。";
-  }
-  return message;
-}
-
-function renderPreviewChunkContext(chunk: SourcePreview["preview_chunks"][number]) {
-  const parts = [chunk.heading_path, chunk.field_label].filter(Boolean);
-  return parts.length ? parts.join(" · ") : null;
 }
 
 function summarizeSourceKinds(sources: ChatMessage["sources"]) {

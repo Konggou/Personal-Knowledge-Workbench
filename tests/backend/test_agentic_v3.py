@@ -233,6 +233,48 @@ def test_v3_web_browsing_enabled_can_return_external_web_evidence(client, monkey
     assert answer["sources"][0]["external_uri"] == "https://example.com/external-note"
 
 
+def test_v3_stream_web_browsing_enabled_can_return_external_web_evidence(client, monkeypatch):
+    project = _create_project(client, name="Web Stream Project")
+    session = _create_session(client, project["id"])
+    external_hits = _external_evidence(project, excerpt="External benchmark notes from the web.")
+
+    monkeypatch.setattr(
+        sessions_route_service.search,
+        "retrieve_project_evidence_with_diagnostics",
+        lambda *args, **kwargs: ([], _diagnostics_for([], grounded_candidate=False)),
+    )
+    monkeypatch.setattr(
+        sessions_route_service.agent.web,
+        "build_external_evidence",
+        lambda **kwargs: external_hits,
+    )
+
+    def fake_stream_grounded_reply(**kwargs):
+        yield "鎴戣ˉ鍏呬簡缃戦〉 "
+        yield "benchmark 缁撴灉銆?"
+        return {
+            "answer_md": "鎴戣ˉ鍏呬簡缃戦〉 benchmark 缁撴灉銆?",
+            "used_general_knowledge": False,
+            "evidence_status": "grounded",
+        }
+
+    monkeypatch.setattr(
+        sessions_route_service.llm,
+        "stream_grounded_reply",
+        fake_stream_grounded_reply,
+    )
+
+    response = client.post(
+        f"/api/v1/sessions/{session['id']}/messages/stream",
+        json={"content": "璇疯仈缃戣ˉ鍏?benchmark 缁撹銆?", "deep_research": False, "web_browsing": True},
+    )
+    assert response.status_code == 200, response.text
+    assert "event: delta" in response.text
+    assert "event: done" in response.text
+    assert '"source_kind": "external_web"' in response.text
+    assert '"external_uri": "https://example.com/external-note"' in response.text
+
+
 def test_v3_successful_grounded_answers_persist_memory_entries(client, monkeypatch, html_server):
     project = _create_project(client, name="Memory Project")
     session = _create_session(client, project["id"])

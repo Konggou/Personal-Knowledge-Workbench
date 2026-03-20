@@ -369,10 +369,6 @@ class SourceService:
                     parts.append(" | ".join(row_cells))
         return " ".join(part for part in parts if part)
 
-    def _fetch_web_content(self, url: str) -> tuple[str, str]:
-        fetched = self.web_research.fetch(url=url)
-        return fetched["title"], fetched["text"]
-
     def _build_plain_text_chunks(self, text: str, max_chars: int = 900) -> list[dict]:
         paragraphs = [paragraph.strip() for paragraph in text.splitlines() if paragraph.strip()]
         blocks = [

@@ -183,16 +183,15 @@ class SessionService:
 
     def _send_message(self, *, session_id: str, content: str, deep_research: bool, web_browsing: bool) -> dict:
         session, normalized_content, current_session = self._prepare_user_turn(session_id=session_id, content=content)
-        turn = self.agent.orchestrate_turn(
+        turn = self._orchestrate_turn(
             session_id=session_id,
-            project_id=session["project_id"],
-            project_name=session["project_name"],
+            session=session,
             query=normalized_content,
             history=current_session["messages"],
-            research_mode=deep_research,
+            deep_research=deep_research,
             web_browsing=web_browsing,
         )
-        self._persist_status_messages(
+        self._create_status_messages(
             session_id=session_id,
             project_id=session["project_id"],
             statuses=turn.status_messages,
@@ -231,23 +230,20 @@ class SessionService:
 
         def event_stream() -> Iterator[str]:
             try:
-                turn = self.agent.orchestrate_turn(
+                turn = self._orchestrate_turn(
                     session_id=session_id,
-                    project_id=session["project_id"],
-                    project_name=session["project_name"],
+                    session=session,
                     query=normalized_content,
                     history=current_session["messages"],
-                    research_mode=deep_research,
+                    deep_research=deep_research,
                     web_browsing=web_browsing,
                 )
-                for status in turn.status_messages:
-                    status_message = self._create_status_message(
-                        session_id=session_id,
-                        project_id=session["project_id"],
-                        title=status["title"],
-                        body=status["content_md"],
-                        status_label=None,
-                    )
+                status_messages = self._create_status_messages(
+                    session_id=session_id,
+                    project_id=session["project_id"],
+                    statuses=turn.status_messages,
+                )
+                for status_message in status_messages:
                     yield self._sse_event("status", {"message": status_message})
 
                 refreshed = self.get_session(session_id)
@@ -311,6 +307,26 @@ class SessionService:
         if current_session is None:
             raise HTTPException(status_code=500, detail="Message send failed unexpectedly.")
         return session, normalized_content, current_session
+
+    def _orchestrate_turn(
+        self,
+        *,
+        session_id: str,
+        session: dict,
+        query: str,
+        history: list[dict],
+        deep_research: bool,
+        web_browsing: bool,
+    ):
+        return self.agent.orchestrate_turn(
+            session_id=session_id,
+            project_id=session["project_id"],
+            project_name=session["project_name"],
+            query=query,
+            history=history,
+            research_mode=deep_research,
+            web_browsing=web_browsing,
+        )
 
     def _generate_answer(
         self,
@@ -414,15 +430,19 @@ class SessionService:
         )
         return message
 
-    def _persist_status_messages(self, *, session_id: str, project_id: str, statuses: list[dict]) -> None:
+    def _create_status_messages(self, *, session_id: str, project_id: str, statuses: list[dict]) -> list[dict]:
+        messages: list[dict] = []
         for status in statuses:
-            self._create_status_message(
-                session_id=session_id,
-                project_id=project_id,
-                title=status["title"],
-                body=status["content_md"],
-                status_label=None,
+            messages.append(
+                self._create_status_message(
+                    session_id=session_id,
+                    project_id=project_id,
+                    title=status["title"],
+                    body=status["content_md"],
+                    status_label=None,
+                )
             )
+        return messages
 
     def _create_status_message(
         self,
