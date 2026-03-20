@@ -9,6 +9,7 @@
 - `/workspace`
 - `/sessions`
 - `/knowledge`
+- `/settings`
 - `/projects/[projectId]`
 - `/projects/[projectId]?sessionId=...`
 
@@ -48,7 +49,15 @@
 - 预览资料
 - 从资料管理进入聊天
 
-### 2.4 `/projects/[projectId]`
+### 2.4 `/settings`
+
+用途：
+
+- 统一配置大模型、向量模型和重排模型
+- 显示当前全局模型配置是否已生效
+- 不承载项目、会话、知识库操作
+
+### 2.5 `/projects/[projectId]`
 
 用途：
 
@@ -56,7 +65,7 @@
 - 项目知识与会话的主入口
 - 未指定 `sessionId` 时不自动打开会话
 
-### 2.5 `/projects/[projectId]?sessionId=...`
+### 2.6 `/projects/[projectId]?sessionId=...`
 
 用途：
 

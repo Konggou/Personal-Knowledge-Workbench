@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import cleanup, health, knowledge, projects, sessions, sources
+from app.api.routes import cleanup, health, knowledge, projects, sessions, settings, sources
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
@@ -8,4 +8,5 @@ api_router.include_router(projects.router, prefix="/projects", tags=["projects"]
 api_router.include_router(sessions.router, tags=["sessions"])
 api_router.include_router(knowledge.router, tags=["knowledge"])
 api_router.include_router(sources.router, tags=["sources"])
+api_router.include_router(settings.router, tags=["settings"])
 api_router.include_router(cleanup.router, prefix="/admin", tags=["admin"])

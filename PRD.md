@@ -97,6 +97,7 @@ v1 只聚焦三件事：
 - `/workspace`
 - `/sessions`
 - `/knowledge`
+- `/settings`
 - `/projects/[projectId]`
 - `/projects/[projectId]?sessionId=...`
 

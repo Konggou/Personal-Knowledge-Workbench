@@ -18,5 +18,6 @@ describe("AppShell", () => {
     expect(screen.getByText("工作台")).toBeInTheDocument();
     expect(screen.getByText("会话")).toBeInTheDocument();
     expect(screen.getByText("知识库")).toBeInTheDocument();
+    expect(screen.getByText("设置")).toBeInTheDocument();
   });
 });

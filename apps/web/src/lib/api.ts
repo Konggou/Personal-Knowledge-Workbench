@@ -131,6 +131,35 @@ export type KnowledgeGroup = {
   items: KnowledgeSource[];
 };
 
+export type LLMSettings = {
+  base_url: string;
+  model: string;
+  timeout_seconds: number;
+  has_api_key: boolean;
+  api_key_preview: string | null;
+};
+
+export type EmbeddingSettings = {
+  model_name: string;
+  dimension: number;
+  allow_downloads: boolean;
+};
+
+export type RerankerSettings = {
+  backend: "rule" | "cross_encoder_local" | "cross_encoder_remote";
+  model_name: string;
+  remote_url: string;
+  remote_timeout_seconds: number;
+  top_n: number;
+  allow_downloads: boolean;
+};
+
+export type ModelSettings = {
+  llm: LLMSettings;
+  embedding: EmbeddingSettings;
+  reranker: RerankerSettings;
+};
+
 export type StreamedMessageEvent =
   | { event: "delta"; data: { delta: string } }
   | { event: "status"; data: { message: ChatMessage } }
@@ -157,6 +186,43 @@ export async function listProjects(input?: {
   const response = await fetch(`${apiBaseUrl}/api/v1/projects?${params.toString()}`, { cache: "no-store" });
   const payload = await readJson<{ items: ProjectSummary[] }>(response);
   return payload.items;
+}
+
+export async function getModelSettings(): Promise<ModelSettings> {
+  const response = await fetch(`${apiBaseUrl}/api/v1/settings/models`, { cache: "no-store" });
+  const payload = await readJson<{ item: ModelSettings }>(response);
+  return payload.item;
+}
+
+export async function updateModelSettings(input: {
+  llm: {
+    base_url: string;
+    model: string;
+    timeout_seconds: number;
+    api_key: string | null;
+    clear_api_key: boolean;
+  };
+  embedding: {
+    model_name: string;
+    dimension: number;
+    allow_downloads: boolean;
+  };
+  reranker: {
+    backend: "rule" | "cross_encoder_local" | "cross_encoder_remote";
+    model_name: string;
+    remote_url: string;
+    remote_timeout_seconds: number;
+    top_n: number;
+    allow_downloads: boolean;
+  };
+}): Promise<ModelSettings> {
+  const response = await fetch(`${apiBaseUrl}/api/v1/settings/models`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<{ item: ModelSettings }>(response);
+  return payload.item;
 }
 
 export async function getProject(projectId: string): Promise<ProjectSummary> {

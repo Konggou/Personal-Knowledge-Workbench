@@ -40,6 +40,7 @@
 - `/workspace`
 - `/sessions`
 - `/knowledge`
+- `/settings`
 - `/projects/[projectId]`
 - `/projects/[projectId]?sessionId=...`
 
@@ -70,6 +71,7 @@
 - `/api/v1/sessions`
 - `/api/v1/knowledge`
 - `/api/v1/sources`
+- `/api/v1/settings`
 
 旧的 task 语义不再作为公开主路径。
 

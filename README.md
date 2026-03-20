@@ -30,6 +30,7 @@
 - `/workspace`
 - `/sessions`
 - `/knowledge`
+- `/settings`
 - `/projects/[projectId]`
 - `/projects/[projectId]?sessionId=...`
 
@@ -38,6 +39,7 @@
 - `工作台`：创建项目、浏览最近活跃项目
 - `会话`：按项目分组浏览最近会话
 - `知识库`：按项目分组管理资料、搜索资料、预览来源
+- `设置`：统一配置大模型、向量模型和重排模型
 - `项目聊天页`：顶部轻导航、左侧项目树、中央聊天主区
 
 ## 主要能力
@@ -154,6 +156,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 apps/api/.venv/Scripts/python.exe -m compileall apps/api/app
 apps/api/.venv/Scripts/python.exe -m pytest tests/backend
 apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all
+apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite benchmark --matrix smoke
+apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite benchmark --matrix smoke --summary-only
 ```
 
 ### 前端
@@ -218,3 +222,16 @@ agentic_rag/
 - `联网补充`
 
 后端会优先走更轻的启发式 planner / readiness 路径，以降低默认聊天延迟。
+## Retrieval Benchmark Defaults
+
+2026-03-20 鐨?full offline retrieval benchmark 宸茬粡鍚屾鍒板綋鍓嶄唬鐮侀粯璁ら厤缃細
+
+- `retrieval_mode=hybrid`
+- `lexical_candidate_limit=8`
+- `semantic_candidate_limit=8`
+- `rrf_k=30`
+- `reranker_top_n=4`
+- `hyde_policy=off`
+- `final_retrieval_limit=3`
+
+濡傛灉鍚庣画 benchmark 鎺ㄨ崘鍊煎彂鐢熷彉鍔紝闇€瑕佸悓姝ユ洿鏂?`apps/api/app/core/settings.py` 鐨勯粯璁ゅ€笺€?

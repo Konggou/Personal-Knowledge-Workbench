@@ -156,6 +156,22 @@ V6-1 已完成
   - 检索/生成链路中的 diagnostics 与 evidence 组装整理
   - 更深层的 optimistic update 统一抽象
 
+V6-2 已启动
+- 目标：新增全局 `设置` 页面，统一管理 LLM / Embedding / Reranker 配置
+- 当前决策：
+  - 配置持久化到 SQLite `_app_metadata`
+  - SQLite 配置优先于环境变量立即生效
+  - 顶部导航新增 `/settings`
+  - API Key 仅显示掩码与配置状态，不回显明文
+离线检索评估基线（2026-03-20）
+- 新增 offline retrieval benchmark：
+  - 评估集覆盖 `direct_field / natural_follow_up / chapter_theme / complex_summary / unrelated`
+  - 指标覆盖 `Recall@k / Hit Rate@k / MRR@10 / nDCG@10 / False Positive Rate / latency`
+  - 参数扫描覆盖 `lexical_candidate_limit / semantic_candidate_limit / rrf_k / reranker_top_n / hyde_policy / final_retrieval_limit`
+- 新增命令入口：
+  - `apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite benchmark --matrix smoke`
+  - 产物输出：`summary.json`、`per_case.json`、`report.md`
+
 默认聊天时延优化
 - 对普通项目内问答，如果没有开启：
   - `深度调研`
@@ -231,3 +247,14 @@ V6-1 已完成
 - 每完成一个功能切片，都要更新本文件
 - 标记完成前，先做 review 风格检查
 - 文档术语必须与聊天优先规范保持一致
+benchmark 榛樿鍙傛暟鍚屾璁板綍锛?026-03-20锛?
+- 宸茬敤 `apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite benchmark --matrix full --summary-only` 澶嶆祴
+- full benchmark 鎺ㄨ崘鍊间负锛?
+  - `retrieval_mode=hybrid`
+  - `lexical_candidate_limit=8`
+  - `semantic_candidate_limit=8`
+  - `rrf_k=30`
+  - `reranker_top_n=4`
+  - `hyde_policy=off`
+  - `final_retrieval_limit=3`
+- 宸插皢鍚庣榛樿 retrieval / reranker 鍙傛暟鍚屾鍒颁笂杩版暟鍊硷紝鐢ㄤ簬閬垮厤 benchmark 鎺ㄨ崘鍊间笌浠ｇ爜榛樿鍊兼紓绉?
