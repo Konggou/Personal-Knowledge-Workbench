@@ -114,7 +114,7 @@ V3 已落地
 - 增加 `联网补充`
 - 支持会话记忆与项目记忆
 - 支持外部网页证据保存到知识库
-- 保留 `WORKBENCH_AGENT_RUNTIME_VERSION=v2` 回退路径
+- 移除 `WORKBENCH_AGENT_RUNTIME_VERSION` 和 `v2` 回退路径，当前只保留统一的图编排运行时
 
 V4 已落地
 - 分支：`codex/v4-retrieval-optimization`

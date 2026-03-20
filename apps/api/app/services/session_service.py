@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.core.settings import get_settings
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.agent_orchestrator_service import AgentOrchestratorService
@@ -105,13 +104,7 @@ class SessionService:
         )
 
     def send_message(self, *, session_id: str, content: str, deep_research: bool, web_browsing: bool = False) -> dict:
-        if self._runtime_version() == "v2":
-            return self._send_message_v2(
-                session_id=session_id,
-                content=content,
-                deep_research=deep_research,
-            )
-        return self._send_message_v3(
+        return self._send_message(
             session_id=session_id,
             content=content,
             deep_research=deep_research,
@@ -126,13 +119,7 @@ class SessionService:
         deep_research: bool,
         web_browsing: bool = False,
     ) -> StreamingResponse:
-        if self._runtime_version() == "v2":
-            return self._stream_send_message_v2(
-                session_id=session_id,
-                content=content,
-                deep_research=deep_research,
-            )
-        return self._stream_send_message_v3(
+        return self._stream_send_message(
             session_id=session_id,
             content=content,
             deep_research=deep_research,
@@ -194,58 +181,7 @@ class SessionService:
             raise HTTPException(status_code=500, detail="Report creation failed unexpectedly.")
         return detail
 
-    def _send_message_v2(self, *, session_id: str, content: str, deep_research: bool) -> dict:
-        session, normalized_content, current_session = self._prepare_user_turn(session_id=session_id, content=content)
-        research_mode = deep_research
-
-        if research_mode:
-            self._create_status_message(
-                session_id=session_id,
-                project_id=session["project_id"],
-                title="调研中",
-                body="正在整理证据并生成更完整的结论。",
-                status_label="researching",
-            )
-
-        evidences = self.grounded_generation.retrieve_evidence(
-            project_id=session["project_id"],
-            query=normalized_content,
-            research_mode=research_mode,
-            history=current_session["messages"],
-        )
-        answer = self._generate_answer(
-            history=current_session["messages"],
-            query=normalized_content,
-            evidences=evidences,
-            research_mode=research_mode,
-            context_notes=None,
-        )
-        if not answer["answer_md"].strip():
-            raise HTTPException(status_code=500, detail="Assistant response was empty.")
-
-        self._persist_assistant_answer(
-            session_id=session_id,
-            project_id=session["project_id"],
-            query=normalized_content,
-            answer=answer,
-            evidences=evidences,
-        )
-
-        if research_mode:
-            self._create_status_message(
-                session_id=session_id,
-                project_id=session["project_id"],
-                title="调研完成",
-                body="已基于当前会话状态生成一版可继续讨论的结论。",
-                status_label="completed",
-            )
-
-        detail = self.get_session(session_id)
-        if detail is None:
-            raise HTTPException(status_code=500, detail="Message send failed unexpectedly.")
-        return detail
-
-    def _send_message_v3(self, *, session_id: str, content: str, deep_research: bool, web_browsing: bool) -> dict:
+    def _send_message(self, *, session_id: str, content: str, deep_research: bool, web_browsing: bool) -> dict:
         session, normalized_content, current_session = self._prepare_user_turn(session_id=session_id, content=content)
         turn = self.agent.orchestrate_turn(
             session_id=session_id,
@@ -283,75 +219,7 @@ class SessionService:
             raise HTTPException(status_code=500, detail="Message send failed unexpectedly.")
         return detail
 
-    def _stream_send_message_v2(self, *, session_id: str, content: str, deep_research: bool) -> StreamingResponse:
-        session, normalized_content, current_session = self._prepare_user_turn(session_id=session_id, content=content)
-        research_mode = deep_research
-
-        def event_stream() -> Iterator[str]:
-            try:
-                if research_mode:
-                    status_message = self._create_status_message(
-                        session_id=session_id,
-                        project_id=session["project_id"],
-                        title="调研中",
-                        body="正在整理证据并生成更完整的结论。",
-                        status_label="researching",
-                    )
-                    yield self._sse_event("status", {"message": status_message})
-
-                evidences = self.grounded_generation.retrieve_evidence(
-                    project_id=session["project_id"],
-                    query=normalized_content,
-                    research_mode=research_mode,
-                    history=current_session["messages"],
-                )
-
-                stream = self._stream_generate_answer(
-                    history=current_session["messages"],
-                    query=normalized_content,
-                    evidences=evidences,
-                    research_mode=research_mode,
-                    context_notes=None,
-                )
-                while True:
-                    try:
-                        chunk = next(stream)
-                    except StopIteration as stop:
-                        answer = stop.value
-                        break
-                    yield self._sse_event("delta", {"delta": chunk})
-
-                if not answer["answer_md"].strip():
-                    raise RuntimeError("Assistant response was empty.")
-
-                assistant_message = self._persist_assistant_answer(
-                    session_id=session_id,
-                    project_id=session["project_id"],
-                    query=normalized_content,
-                    answer=answer,
-                    evidences=evidences,
-                )
-                yield self._sse_event("done", {"message": assistant_message})
-
-                if research_mode:
-                    status_message = self._create_status_message(
-                        session_id=session_id,
-                        project_id=session["project_id"],
-                        title="调研完成",
-                        body="已基于当前会话状态生成一版可继续讨论的结论。",
-                        status_label="completed",
-                    )
-                    yield self._sse_event("status", {"message": status_message})
-            except Exception as exc:
-                yield self._sse_event("error", {"message": str(exc)})
-
-        return StreamingResponse(
-            event_stream(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
-        )
-
-    def _stream_send_message_v3(
+    def _stream_send_message(
         self,
         *,
         session_id: str,
@@ -673,10 +541,6 @@ class SessionService:
         if len(normalized) <= 240:
             return normalized
         return f"{normalized[:237]}..."
-
-    def _runtime_version(self) -> str:
-        version = get_settings().agent_runtime_version.strip().lower()
-        return "v2" if version == "v2" else "v3"
 
     def _chunk_text(self, text: str, size: int = 48) -> Iterator[str]:
         for index in range(0, len(text), size):

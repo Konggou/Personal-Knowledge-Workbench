@@ -71,7 +71,6 @@ class Settings(BaseModel):
     llm_grounded_factoid_max_tokens: int = int(_setting("WORKBENCH_LLM_GROUNDED_FACTOID_MAX_TOKENS", "96"))
     llm_grounded_default_max_tokens: int = int(_setting("WORKBENCH_LLM_GROUNDED_DEFAULT_MAX_TOKENS", "220"))
     llm_grounded_research_max_tokens: int = int(_setting("WORKBENCH_LLM_GROUNDED_RESEARCH_MAX_TOKENS", "360"))
-    agent_runtime_version: str = _setting("WORKBENCH_AGENT_RUNTIME_VERSION", "v3")
     agent_web_result_limit: int = int(_setting("WORKBENCH_AGENT_WEB_RESULT_LIMIT", "3"))
     agent_web_fetch_limit: int = int(_setting("WORKBENCH_AGENT_WEB_FETCH_LIMIT", "2"))
 

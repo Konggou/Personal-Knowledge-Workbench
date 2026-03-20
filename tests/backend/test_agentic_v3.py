@@ -448,31 +448,4 @@ def test_v3_pre_answer_check_can_retry_project_retrieval_once(client, monkeypatc
     assert any(item["title"] == "正在重新聚焦资料" for item in statuses)
 
 
-def test_v2_runtime_flag_still_routes_to_legacy_send_flow(monkeypatch):
-    captured = {"v2": False, "v3": False}
 
-    monkeypatch.setattr(
-        "app.services.session_service.get_settings",
-        lambda: SimpleNamespace(agent_runtime_version="v2"),
-    )
-    monkeypatch.setattr(
-        sessions_route_service,
-        "_send_message_v2",
-        lambda **kwargs: captured.__setitem__("v2", True) or {"id": "legacy"},
-    )
-    monkeypatch.setattr(
-        sessions_route_service,
-        "_send_message_v3",
-        lambda **kwargs: captured.__setitem__("v3", True) or {"id": "graph"},
-    )
-
-    result = sessions_route_service.send_message(
-        session_id="session-legacy",
-        content="legacy",
-        deep_research=False,
-        web_browsing=True,
-    )
-
-    assert result == {"id": "legacy"}
-    assert captured["v2"] is True
-    assert captured["v3"] is False
