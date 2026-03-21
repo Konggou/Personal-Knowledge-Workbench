@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/shell/app-shell";
 import { ProjectChatClient } from "@/components/projects/project-chat-client";
-import { getProject, getSession, listProjects, listProjectSources, listSessionGroups } from "@/lib/api";
+import { getProject, getSession, listProjectSessions, listProjects, listProjectSources } from "@/lib/api";
 
 import styles from "@/components/projects/project-chat-client.module.css";
 
@@ -16,10 +16,10 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
     ? getSession(sessionId).catch(() => null)
     : Promise.resolve(null);
 
-  const [project, projects, sessionGroups, sources, selectedSession] = await Promise.all([
+  const [project, projects, projectSessions, sources, selectedSession] = await Promise.all([
     getProject(projectId),
     listProjects(),
-    listSessionGroups(),
+    listProjectSessions(projectId),
     listProjectSources(projectId),
     selectedSessionPromise,
   ]);
@@ -29,8 +29,8 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
     <AppShell headerClassName={styles.appShellHeader} mainClassName={styles.appShellMain}>
       <ProjectChatClient
         allProjects={projects}
+        initialProjectSessions={projectSessions}
         initialSelectedSession={normalizedSelectedSession}
-        initialSessionGroups={sessionGroups}
         initialSources={sources}
         project={project}
       />

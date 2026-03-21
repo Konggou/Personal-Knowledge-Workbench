@@ -1127,3 +1127,53 @@ def test_grounded_generation_keeps_project_evidence_ahead_of_external_web():
     assert packed[0]["source_kind"] == "project_source"
     assert all(item["source_kind"] == "project_source" for item in packed)
     assert packed_diagnostics["final"]["external_source_count"] == 0
+
+
+def test_summary_and_report_cards_keep_final_sources(client, monkeypatch, html_server):
+    project = _create_project(client, name="Result Cards Source Sync")
+    session = _create_session(client, project["id"])
+    source_url = _create_html_source(
+        html_server,
+        "result-card-source.html",
+        "<html><head><title>Quest 3 Notes</title></head><body><p>Quest 3 ships with Touch Plus controllers by default.</p></body></html>",
+    )
+    source = client.post(f"/api/v1/projects/{project['id']}/sources/web", json={"url": source_url}).json()["item"]
+    evidence = _sample_evidence(source)
+
+    monkeypatch.setattr(
+        sessions_route_service.search,
+        "retrieve_project_evidence_with_diagnostics",
+        lambda project_id, query, limit=3, apply_rerank=False, history=None: _with_diagnostics(evidence),
+    )
+    monkeypatch.setattr(
+        sessions_route_service.llm,
+        "generate_grounded_reply",
+        lambda **kwargs: {
+            "answer_md": "Quest 3 默认配套的是 **Touch Plus** 手柄。",
+            "used_general_knowledge": False,
+            "evidence_status": "grounded",
+        },
+    )
+
+    send_response = client.post(
+        f"/api/v1/sessions/{session['id']}/messages",
+        json={"content": "我用的是哪个手柄？", "deep_research": False},
+    )
+    assert send_response.status_code == 200, send_response.text
+
+    summary_response = client.post(f"/api/v1/sessions/{session['id']}/summary")
+    report_response = client.post(f"/api/v1/sessions/{session['id']}/report")
+
+    assert summary_response.status_code == 200, summary_response.text
+    assert report_response.status_code == 200, report_response.text
+
+    detail = client.get(f"/api/v1/sessions/{session['id']}").json()["item"]
+    summary_card = next(item for item in detail["messages"] if item["message_type"] == "summary_card")
+    report_card = next(item for item in detail["messages"] if item["message_type"] == "report_card")
+
+    assert len(summary_card["sources"]) == 1
+    assert len(report_card["sources"]) == 1
+    assert summary_card["sources"][0]["source_title"] == "Quest 3 Notes"
+    assert report_card["sources"][0]["source_title"] == "Quest 3 Notes"
+    assert summary_card["source_mode"] == "project_grounded"
+    assert report_card["source_mode"] == "project_grounded"

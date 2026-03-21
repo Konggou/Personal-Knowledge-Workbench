@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AnchorHTMLAttributes } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ChatMessage, KnowledgeSource, ProjectSummary, SessionDetail, SessionGroup, SessionSummary } from "@/lib/api";
+import type { ChatMessage, KnowledgeSource, ProjectSummary, SessionDetail, SessionSummary } from "@/lib/api";
 
 import { ProjectChatClient } from "./project-chat-client";
 
@@ -212,14 +212,8 @@ function createSessionWithAssistantAnswer(): SessionDetail {
   };
 }
 
-function createSessionGroups(): SessionGroup[] {
-  return [
-    {
-      project_id: "project-1",
-      project_name: "Grounded Project",
-      items: [createSessionSummary()],
-    },
-  ];
+function createProjectSessions(): SessionSummary[] {
+  return [createSessionSummary()];
 }
 
 function deferred() {
@@ -272,8 +266,8 @@ describe("ProjectChatClient", () => {
     render(
       <ProjectChatClient
         allProjects={[project]}
+        initialProjectSessions={createProjectSessions()}
         initialSelectedSession={initialSession}
-        initialSessionGroups={createSessionGroups()}
         initialSources={[createKnowledgeSource()]}
         project={project}
       />,
@@ -323,8 +317,8 @@ describe("ProjectChatClient", () => {
     render(
       <ProjectChatClient
         allProjects={[project]}
+        initialProjectSessions={createProjectSessions()}
         initialSelectedSession={session}
-        initialSessionGroups={createSessionGroups()}
         initialSources={[createKnowledgeSource()]}
         project={project}
       />,
@@ -361,8 +355,8 @@ describe("ProjectChatClient", () => {
     render(
       <ProjectChatClient
         allProjects={[project]}
+        initialProjectSessions={createProjectSessions()}
         initialSelectedSession={initialSession}
-        initialSessionGroups={createSessionGroups()}
         initialSources={[createKnowledgeSource()]}
         project={project}
       />,
@@ -405,8 +399,8 @@ describe("ProjectChatClient", () => {
     render(
       <ProjectChatClient
         allProjects={[project]}
+        initialProjectSessions={createProjectSessions()}
         initialSelectedSession={initialSession}
-        initialSessionGroups={createSessionGroups()}
         initialSources={[createKnowledgeSource()]}
         project={project}
       />,
@@ -453,8 +447,8 @@ describe("ProjectChatClient", () => {
     const { container } = render(
       <ProjectChatClient
         allProjects={[project]}
+        initialProjectSessions={createProjectSessions()}
         initialSelectedSession={initialSession}
-        initialSessionGroups={createSessionGroups()}
         initialSources={[createKnowledgeSource()]}
         project={project}
       />,
@@ -499,8 +493,8 @@ describe("ProjectChatClient", () => {
     render(
       <ProjectChatClient
         allProjects={[project]}
+        initialProjectSessions={createProjectSessions()}
         initialSelectedSession={session}
-        initialSessionGroups={createSessionGroups()}
         initialSources={[createKnowledgeSource()]}
         project={project}
       />,
@@ -549,8 +543,8 @@ describe("ProjectChatClient", () => {
     render(
       <ProjectChatClient
         allProjects={[project]}
+        initialProjectSessions={createProjectSessions()}
         initialSelectedSession={session}
-        initialSessionGroups={createSessionGroups()}
         initialSources={[createKnowledgeSource()]}
         project={project}
       />,
@@ -567,7 +561,7 @@ describe("ProjectChatClient", () => {
         }),
       ),
     );
-    expect(await screen.findByText("已保存到知识库，可继续追问新资料。")).toBeInTheDocument();
+    expect(await screen.findByText("已保存到知识库，可以继续追问新资料。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "已保存到知识库" })).toBeDisabled();
   });
 });

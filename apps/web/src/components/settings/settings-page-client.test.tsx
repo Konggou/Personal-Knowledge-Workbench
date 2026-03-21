@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SettingsPageClient } from "./settings-page-client";
 
@@ -39,6 +39,10 @@ const initialSettings = {
 };
 
 describe("SettingsPageClient", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("renders all model sections and masked key state", () => {
     render(<SettingsPageClient initialSettings={initialSettings} />);
 
@@ -74,5 +78,15 @@ describe("SettingsPageClient", () => {
       }),
     );
     expect(await screen.findByText("模型设置已保存，新请求会使用最新配置。")).toBeInTheDocument();
+  });
+
+  it("blocks saving when remote reranker is selected without a URL", async () => {
+    render(<SettingsPageClient initialSettings={initialSettings} />);
+
+    fireEvent.change(screen.getByDisplayValue("rule"), { target: { value: "cross_encoder_remote" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
+
+    expect(mocks.updateModelSettings).not.toHaveBeenCalled();
+    expect(await screen.findByText("远程 reranker 后端必须填写 Remote URL。")).toBeInTheDocument();
   });
 });

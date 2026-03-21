@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from app.core.settings import get_settings
 from app.repositories.search_repository import SearchRepository
 from app.services.retrieval_benchmark_service import compute_case_metrics, run_offline_retrieval_benchmark
 
@@ -112,3 +113,12 @@ def test_offline_retrieval_benchmark_smoke_writes_artifacts(client, monkeypatch)
     assert "lexical-only" in config_labels
     assert "semantic-only" in config_labels
     assert "hybrid-current" in config_labels
+
+
+def test_runtime_defaults_match_benchmark_recommendation():
+    settings = get_settings()
+
+    assert settings.retrieval_lexical_candidate_limit == 8
+    assert settings.retrieval_semantic_candidate_limit == 8
+    assert settings.retrieval_rrf_k == 30
+    assert settings.reranker_top_n == 4

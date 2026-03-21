@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { ModelSettings } from "@/lib/api";
 import { updateModelSettings } from "@/lib/api";
@@ -34,7 +34,51 @@ export function SettingsPageClient({ initialSettings }: SettingsPageClientProps)
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const validationError = useMemo(() => {
+    if (!llmBaseUrl.trim()) {
+      return "LLM Base URL 不能为空。";
+    }
+    if (!llmModel.trim()) {
+      return "LLM 模型名称不能为空。";
+    }
+    if (!isPositiveNumber(llmTimeout)) {
+      return "LLM 超时时间必须是大于 0 的数字。";
+    }
+    if (!embeddingModel.trim()) {
+      return "向量模型名称不能为空。";
+    }
+    if (!isPositiveInteger(embeddingDimension)) {
+      return "向量维度必须是大于 0 的整数。";
+    }
+    if (!isPositiveNumber(rerankerRemoteTimeout)) {
+      return "重排超时时间必须是大于 0 的数字。";
+    }
+    if (!isPositiveInteger(rerankerTopN)) {
+      return "Reranker Top N 必须是大于 0 的整数。";
+    }
+    if (rerankerBackend === "cross_encoder_remote" && !rerankerRemoteUrl.trim()) {
+      return "远程 reranker 后端必须填写 Remote URL。";
+    }
+    return null;
+  }, [
+    embeddingDimension,
+    embeddingModel,
+    llmBaseUrl,
+    llmModel,
+    llmTimeout,
+    rerankerBackend,
+    rerankerRemoteTimeout,
+    rerankerRemoteUrl,
+    rerankerTopN,
+  ]);
+
   async function handleSave() {
+    if (validationError) {
+      setError(validationError);
+      setNotice(null);
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
     setNotice(null);
@@ -77,7 +121,9 @@ export function SettingsPageClient({ initialSettings }: SettingsPageClientProps)
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>大模型</h2>
-          <p className={styles.sectionBody}>用于普通对话、grounded 回答与深度调研生成。</p>
+          <p className={styles.sectionBody}>
+            用于普通对话、grounded 回答与深度调研生成。保存后只影响后续新请求，不会重跑已完成的历史回答。
+          </p>
         </div>
         <div className={styles.grid}>
           <label className={styles.field}>
@@ -94,16 +140,9 @@ export function SettingsPageClient({ initialSettings }: SettingsPageClientProps)
           </label>
           <label className={styles.field}>
             <span>API Key</span>
-            <input
-              onChange={(event) => setLlmApiKey(event.target.value)}
-              placeholder="留空表示不修改"
-              type="password"
-              value={llmApiKey}
-            />
+            <input onChange={(event) => setLlmApiKey(event.target.value)} placeholder="留空表示不修改" type="password" value={llmApiKey} />
             <span className={styles.fieldHint}>
-              {savedSettings.llm.has_api_key
-                ? `已配置：${savedSettings.llm.api_key_preview ?? "******"}`
-                : "当前未配置 API Key"}
+              {savedSettings.llm.has_api_key ? `已配置：${savedSettings.llm.api_key_preview ?? "******"}` : "当前未配置 API Key"}
             </span>
           </label>
         </div>
@@ -116,7 +155,7 @@ export function SettingsPageClient({ initialSettings }: SettingsPageClientProps)
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>向量模型</h2>
-          <p className={styles.sectionBody}>用于资料入库、语义检索和向量化查询。</p>
+          <p className={styles.sectionBody}>用于资料入库、语义检索和向量化查询。变更后会影响后续新入库与新检索行为。</p>
         </div>
         <div className={styles.grid}>
           <label className={styles.field}>
@@ -141,7 +180,9 @@ export function SettingsPageClient({ initialSettings }: SettingsPageClientProps)
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>重排模型</h2>
-          <p className={styles.sectionBody}>用于最终证据排序与候选结果重排。</p>
+          <p className={styles.sectionBody}>
+            用于最终证据重排与候选结果排序。当前 benchmark 推荐值已与运行时默认值保持一致：lexical=8、semantic=8、rrf_k=30、top_n=4。
+          </p>
         </div>
         <div className={styles.grid}>
           <label className={styles.field}>
@@ -159,14 +200,13 @@ export function SettingsPageClient({ initialSettings }: SettingsPageClientProps)
           <label className={styles.field}>
             <span>Remote URL</span>
             <input onChange={(event) => setRerankerRemoteUrl(event.target.value)} value={rerankerRemoteUrl} />
+            <span className={styles.fieldHint}>
+              {rerankerBackend === "cross_encoder_remote" ? "当前后端需要可访问的远程地址。" : "本地 rule / local backend 可留空。"}
+            </span>
           </label>
           <label className={styles.field}>
             <span>Remote Timeout (seconds)</span>
-            <input
-              onChange={(event) => setRerankerRemoteTimeout(event.target.value)}
-              type="number"
-              value={rerankerRemoteTimeout}
-            />
+            <input onChange={(event) => setRerankerRemoteTimeout(event.target.value)} type="number" value={rerankerRemoteTimeout} />
           </label>
           <label className={styles.field}>
             <span>Top N</span>
@@ -184,13 +224,24 @@ export function SettingsPageClient({ initialSettings }: SettingsPageClientProps)
       </section>
 
       <div className={styles.actions}>
-        <button className={styles.saveButton} disabled={isSaving} onClick={() => void handleSave()} type="button">
+        <button className={styles.saveButton} disabled={isSaving || !!validationError} onClick={() => void handleSave()} type="button">
           {isSaving ? "保存中..." : "保存设置"}
         </button>
         {notice ? <span className={styles.success}>{notice}</span> : null}
         {error ? <span className={styles.error}>{error}</span> : null}
+        {!error && validationError ? <span className={styles.error}>{validationError}</span> : null}
       </div>
-      <p className={styles.meta}>当前页面保存的是全局模型配置，不区分项目。</p>
+      <p className={styles.meta}>当前页面保存的是全局模型配置，不区分项目。新配置会优先写入 SQLite，并覆盖环境变量回退值。</p>
     </div>
   );
+}
+
+function isPositiveInteger(value: string) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0;
+}
+
+function isPositiveNumber(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0;
 }
