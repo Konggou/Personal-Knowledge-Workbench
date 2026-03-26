@@ -9,7 +9,7 @@ import httpx
 from app.core.settings import get_settings
 
 
-GROUNDING_DISCLOSURE_NOTE = "补充说明：部分补充解释来自通用常识，不来自当前项目资料。"
+GROUNDING_DISCLOSURE_NOTE = "\u8865\u5145\u8bf4\u660e\uff1a\u90e8\u5206\u8865\u5145\u89e3\u91ca\u6765\u81ea\u901a\u7528\u5e38\u8bc6\uff0c\u4e0d\u6765\u81ea\u5f53\u524d\u9879\u76ee\u8d44\u6599\u3002"
 
 
 class GroundedJsonStreamParser:
@@ -149,6 +149,7 @@ class LLMService:
         evidence_pack: list[dict],
         research_mode: bool = False,
         context_notes: list[str] | None = None,
+        evidence_mode: str = "project",
     ) -> dict:
         if not self.is_configured():
             raise RuntimeError("LLM is not configured.")
@@ -157,6 +158,7 @@ class LLMService:
             evidence_pack=evidence_pack,
             research_mode=research_mode,
             context_notes=context_notes,
+            evidence_mode=evidence_mode,
         )
         raw_text = self._complete_messages(
             messages=messages,
@@ -185,6 +187,7 @@ class LLMService:
         evidence_pack: list[dict],
         research_mode: bool = False,
         context_notes: list[str] | None = None,
+        evidence_mode: str = "project",
     ) -> Iterator[str]:
         if not self.is_configured():
             raise RuntimeError("LLM is not configured.")
@@ -193,6 +196,7 @@ class LLMService:
             evidence_pack=evidence_pack,
             research_mode=research_mode,
             context_notes=context_notes,
+            evidence_mode=evidence_mode,
         )
         parser = GroundedJsonStreamParser(sanitizer=self._sanitize_output)
         for chunk in self._stream_completion(
@@ -327,7 +331,6 @@ class LLMService:
     def _should_use_heuristic_planner(self, *, query: str, research_mode: bool, web_browsing: bool) -> bool:
         if research_mode:
             return False
-            return True
         if web_browsing:
             return False
         return True
@@ -402,7 +405,7 @@ class LLMService:
     ) -> list[dict]:
         system_prompt = (
             "你是一个中文优先的知识工作助手。当前项目没有命中足够的本地资料时，"
-            "你可以按通用大模型对话模式自然回答。请保持准确、简洁，不确定时明确说明不确定。"
+            "你可以按通用对话方式自然回答。请保持准确、简洁，不确定时明确说明不确定。"
         )
         if research_mode:
             system_prompt += " 本次开启了深度调研模式，可以给出更结构化的分析与结论。"
@@ -419,6 +422,7 @@ class LLMService:
         evidence_pack: list[dict],
         research_mode: bool,
         context_notes: list[str] | None,
+        evidence_mode: str = "project",
     ) -> list[dict]:
         history = self._conversation_to_messages(conversation)
         recent_history = history[-8:]
@@ -469,6 +473,7 @@ class LLMService:
         if context_notes:
             note_limit = 3 if factoid_mode else 5
             context_block = "\n\n可参考上下文：\n" + "\n".join(f"- {note}" for note in context_notes[:note_limit])
+        evidence_mode_note = self._build_grounded_evidence_mode_note(evidence_mode)
         grounded_prompt = (
             "你正在基于项目资料回答用户问题。请只输出 JSON，不要输出代码块或额外解释。"
             '\nJSON 结构：{"answer_md":"...","used_general_knowledge":false,"evidence_status":"grounded"}'
@@ -482,6 +487,7 @@ class LLMService:
             f"\n7. {answer_style}"
             f"\n8. {length_style}"
             "\n9. 只有确实补充了项目外常识，used_general_knowledge 才能为 true。"
+            f"\n10. {evidence_mode_note}"
             f"\n\n用户问题：\n{current_question}"
             f"{context_block}"
             "\n\n可用项目证据：\n"
@@ -595,14 +601,14 @@ class LLMService:
         contextual = self._query_looks_contextual(query)
         complex_query = research_mode or self._query_looks_complex(query)
         task_type = "lookup"
-        if contextual:
-            task_type = "follow_up"
-        elif any(keyword in query for keyword in ("总结", "梳理", "概括", "结论", "建议")):
+        if any(keyword in query for keyword in ("\u603b\u7ed3", "\u68b3\u7406", "\u6982\u62ec", "\u7ed3\u8bba", "\u5efa\u8bae")):
             task_type = "summarize"
-        elif any(keyword in query for keyword in ("对比", "区别", "差异", "比较")):
+        elif any(keyword in query for keyword in ("\u5bf9\u6bd4", "\u533a\u522b", "\u5dee\u5f02", "\u6bd4\u8f83")):
             task_type = "compare"
-        elif any(keyword in query for keyword in ("为什么", "原因", "如何", "怎么")):
+        elif any(keyword in query for keyword in ("\u4e3a\u4ec0\u4e48", "\u539f\u56e0", "\u5982\u4f55", "\u600e\u4e48")):
             task_type = "explain"
+        elif contextual:
+            task_type = "follow_up"
 
         if memory_notes and contextual:
             working_query = f"{working_query} {' '.join(memory_notes[:2])}"
@@ -610,7 +616,7 @@ class LLMService:
         should_use_web = False
         if web_browsing and (
             research_mode
-            or any(keyword in query for keyword in ("联网", "官网", "最新", "外部", "行业", "公开资料", "benchmark", "基准"))
+            or any(keyword in query for keyword in ("\u8054\u7f51", "\u5b98\u7f51", "\u6700\u65b0", "\u5916\u90e8", "\u884c\u4e1a", "\u516c\u5f00\u8d44\u6599", "benchmark", "\u57fa\u51c6"))
         ):
             should_use_web = True
         return {
@@ -710,7 +716,7 @@ class LLMService:
             return True
         return any(
             keyword in normalized
-            for keyword in ("总结", "梳理", "比较", "区别", "差异", "建议", "结论", "原因", "为什么", "如何", "方案", "评估")
+            for keyword in ("\u603b\u7ed3", "\u68b3\u7406", "\u6bd4\u8f83", "\u533a\u522b", "\u5dee\u5f02", "\u5efa\u8bae", "\u7ed3\u8bba", "\u539f\u56e0", "\u4e3a\u4ec0\u4e48", "\u5982\u4f55", "\u65b9\u6848", "\u8bc4\u4f30")
         )
 
     def _query_looks_factoid(self, query: str) -> bool:
@@ -965,4 +971,23 @@ class LLMService:
         normalized = " ".join(query.split()).lower()
         if len(normalized) <= 14:
             return True
-        return any(term in normalized for term in ("现在", "这个", "那个", "它", "知道了吗", "了吧"))
+        return any(term in normalized for term in ("\u73b0\u5728", "\u8fd9\u4e2a", "\u90a3\u4e2a", "\u5b83", "\u77e5\u9053\u4e86\u5417", "\u4e86\u5417"))
+
+    def _build_grounded_evidence_mode_note(self, evidence_mode: str) -> str:
+        if evidence_mode == "web":
+            return (
+                "\u5f53\u524d\u53ef\u7528\u8bc1\u636e\u4e3b\u8981\u6765\u81ea\u8054\u7f51\u8865\u5145\u6765\u6e90\uff0c"
+                "\u8bf7\u57fa\u4e8e\u8fd9\u4e9b\u7f51\u9875\u8bc1\u636e\u7ed9\u51fa\u7ed3\u8bba\uff0c"
+                "\u4e0d\u8981\u56e0\u4e3a\u7f3a\u5c11\u9879\u76ee\u5185\u8d44\u6599\u5c31\u9ed8\u8ba4\u62d2\u7b54\u3002"
+                "\u53ea\u8981\u5f53\u524d\u7f51\u9875\u8bc1\u636e\u5df2\u7ecf\u53ef\u4ee5\u652f\u6491\u603b\u7ed3\uff0c"
+                "\u5c31\u76f4\u63a5\u660e\u786e\u8bf4\u660e\u7ed3\u8bba\u4e3b\u8981\u57fa\u4e8e\u8054\u7f51\u8865\u5145\u6765\u6e90\u3002"
+            )
+        if evidence_mode == "hybrid":
+            return (
+                "\u5f53\u524d\u8bc1\u636e\u540c\u65f6\u5305\u542b\u9879\u76ee\u8d44\u6599\u548c\u8054\u7f51\u8865\u5145\u6765\u6e90\uff0c"
+                "\u8bf7\u4f18\u5148\u7ed3\u5408\u9879\u76ee\u8d44\u6599\uff0c\u5e76\u7528\u8054\u7f51\u8bc1\u636e\u8865\u5145\u80cc\u666f\u6216\u4ea4\u53c9\u9a8c\u8bc1\u3002"
+            )
+        return (
+            "\u5f53\u524d\u8bc1\u636e\u4ee5\u9879\u76ee\u5185\u8d44\u6599\u4e3a\u4e3b\uff0c"
+            "\u8bf7\u4f18\u5148\u6839\u636e\u9879\u76ee\u8bc1\u636e\u56de\u7b54\u3002"
+        )

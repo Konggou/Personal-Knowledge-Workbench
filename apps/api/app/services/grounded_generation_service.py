@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextvars import ContextVar
+import logging
 import re
 
 from app.services.llm_service import GROUNDING_DISCLOSURE_NOTE, LLMService
@@ -19,6 +20,8 @@ GROUNDING_STREAM_INTERRUPTED_NOTE = (
     "\u8865\u5145\u8bf4\u660e\uff1a\u672c\u6b21\u57fa\u4e8e\u9879\u76ee\u8d44\u6599\u7684\u751f\u6210"
     "\u5728\u4e2d\u9014\u88ab\u4e2d\u65ad\uff0c\u4ee5\u4e0a\u5185\u5bb9\u53ef\u80fd\u4e0d\u5b8c\u6574\u3002"
 )
+
+logger = logging.getLogger(__name__)
 
 
 class GroundedGenerationService:
@@ -75,16 +78,19 @@ class GroundedGenerationService:
         research_mode: bool,
         context_notes: list[str] | None = None,
     ) -> dict:
+        evidence_mode = self._classify_evidence_mode(evidences)
         try:
             grounded = self.llm.generate_grounded_reply(
                 conversation=history,
                 evidence_pack=evidences,
                 research_mode=research_mode,
                 context_notes=context_notes,
+                evidence_mode=evidence_mode,
             )
-        except RuntimeError:
+        except RuntimeError as exc:
+            logger.warning("Grounded answer generation failed: %s", exc)
             grounded = self._build_grounded_failure_answer(query=query, evidences=evidences)
-        return self._build_answer_payload(grounded=grounded, research_mode=research_mode)
+        return self._build_answer_payload(grounded=grounded, research_mode=research_mode, evidences=evidences)
 
     def stream_generate_answer(
         self,
@@ -95,6 +101,7 @@ class GroundedGenerationService:
         research_mode: bool,
         context_notes: list[str] | None = None,
     ) -> Iterator[str]:
+        evidence_mode = self._classify_evidence_mode(evidences)
         streamed_chunks: list[str] = []
         try:
             iterator = self.llm.stream_grounded_reply(
@@ -102,6 +109,7 @@ class GroundedGenerationService:
                 evidence_pack=evidences,
                 research_mode=research_mode,
                 context_notes=context_notes,
+                evidence_mode=evidence_mode,
             )
             while True:
                 try:
@@ -111,7 +119,8 @@ class GroundedGenerationService:
                     break
                 streamed_chunks.append(chunk)
                 yield chunk
-        except RuntimeError:
+        except RuntimeError as exc:
+            logger.warning("Grounded streamed generation failed: %s", exc)
             if streamed_chunks:
                 partial_answer = "".join(streamed_chunks).strip()
                 interrupted_answer = self._append_stream_interruption_note(partial_answer)
@@ -127,7 +136,7 @@ class GroundedGenerationService:
                 grounded = self._build_grounded_failure_answer(query=query, evidences=evidences)
                 for chunk in self._chunk_text(grounded["answer_md"]):
                     yield chunk
-        return self._build_answer_payload(grounded=grounded, research_mode=research_mode)
+        return self._build_answer_payload(grounded=grounded, research_mode=research_mode, evidences=evidences)
 
     def prepare_agent_evidence(
         self,
@@ -672,13 +681,13 @@ class GroundedGenerationService:
 
         return False
 
-    def _build_answer_payload(self, *, grounded: dict, research_mode: bool) -> dict:
+    def _build_answer_payload(self, *, grounded: dict, research_mode: bool, evidences: list[dict]) -> dict:
         return {
             "title": "\u8c03\u7814\u7ed3\u8bba" if research_mode else None,
             "answer_md": grounded["answer_md"].strip(),
             "source_mode": "project_grounded",
             "evidence_status": grounded["evidence_status"],
-            "disclosure_note": self._build_disclosure_note(grounded),
+            "disclosure_note": self._build_disclosure_note(grounded, evidences=evidences),
         }
 
     def _build_grounded_failure_answer(self, *, query: str, evidences: list[dict]) -> dict:
@@ -691,6 +700,7 @@ class GroundedGenerationService:
             ),
             "used_general_knowledge": False,
             "evidence_status": "grounded",
+            "generation_failed": True,
         }
 
     def _append_stream_interruption_note(self, answer_md: str) -> str:
@@ -698,10 +708,29 @@ class GroundedGenerationService:
         separator = "\n\n" if normalized else ""
         return f"{normalized}{separator}{GROUNDING_STREAM_INTERRUPTED_NOTE}".strip()
 
-    def _build_disclosure_note(self, grounded: dict) -> str | None:
+    def _build_disclosure_note(self, grounded: dict, *, evidences: list[dict]) -> str | None:
+        notes: list[str] = []
+        if grounded.get("generation_failed"):
+            return None
+        evidence_mode = self._classify_evidence_mode(evidences)
+        if evidence_mode == "web":
+            notes.append("\u8865\u5145\u8bf4\u660e\uff1a\u4ee5\u4e0b\u7ed3\u8bba\u4e3b\u8981\u57fa\u4e8e\u8054\u7f51\u8865\u5145\u6765\u6e90\uff0c\u5e76\u7ed3\u5408\u5f53\u524d\u4f1a\u8bdd\u4e0a\u4e0b\u6587\u6574\u7406\u3002")
+        elif evidence_mode == "hybrid":
+            notes.append("\u8865\u5145\u8bf4\u660e\uff1a\u4ee5\u4e0b\u7ed3\u8bba\u7efc\u5408\u4e86\u9879\u76ee\u8d44\u6599\u4e0e\u8054\u7f51\u8865\u5145\u6765\u6e90\u3002")
         if grounded.get("used_general_knowledge"):
-            return GROUNDING_DISCLOSURE_NOTE
-        return None
+            notes.append(GROUNDING_DISCLOSURE_NOTE)
+        if not notes:
+            return None
+        return "\n".join(notes)
+
+    def _classify_evidence_mode(self, evidences: list[dict]) -> str:
+        has_project_evidence = any(item.get("source_kind") != "external_web" for item in evidences)
+        has_web_evidence = any(item.get("source_kind") == "external_web" for item in evidences)
+        if has_project_evidence and has_web_evidence:
+            return "hybrid"
+        if has_web_evidence:
+            return "web"
+        return "project"
 
     def _chunk_text(self, text: str, size: int = 48) -> Iterator[str]:
         for index in range(0, len(text), size):

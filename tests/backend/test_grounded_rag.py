@@ -333,6 +333,96 @@ def test_build_grounded_messages_restored_and_guides_factoid_brevity():
     assert "excerpt: 项目名称：室内空气质量检测与智能控制系统。" in messages[-1]["content"]
 
 
+def test_planner_and_precheck_messages_are_structured_for_research_and_web():
+    service = LLMService()
+
+    planner_messages = service._build_agent_planner_messages(
+        query="How should we evaluate a RAG system end to end?",
+        memory_notes=["The project already stores several notes about RAG evaluation."],
+        research_mode=True,
+        web_browsing=True,
+    )
+    precheck_messages = service._build_pre_answer_check_messages(
+        query="How should we evaluate a RAG system end to end?",
+        evidence_pack=[
+            {
+                "source_title": "RAG Eval Guide",
+                "source_kind": "external_web",
+                "excerpt": "Use retrieval, generation, and end-to-end evaluation together.",
+            }
+        ],
+        plan_summary="Inspect project evidence first, then supplement with web evidence if needed",
+        research_mode=True,
+        web_browsing_enabled=True,
+        web_used=True,
+        diagnostics={"first_pass": {"top_score": 2.8, "term_coverage_ratio": 0.5}, "final": {"selected_evidence_count": 1}},
+        project_retry_count=0,
+    )
+
+    assert "请严格输出 JSON" in planner_messages[-1]["content"]
+    assert '"should_use_web":false' in planner_messages[-1]["content"]
+    assert "网页补充是否可用：yes" in planner_messages[-1]["content"]
+    assert "action 只能是 proceed / retry_project / need_web / insufficient" in precheck_messages[-1]["content"]
+    assert "网页补充开关：on" in precheck_messages[-1]["content"]
+
+
+def test_build_grounded_messages_mentions_web_led_evidence_mode():
+    service = LLMService()
+
+    messages = service._build_grounded_messages(
+        conversation=[{"message_type": "user_prompt", "content_md": "??? RAG ????"}],
+        evidence_pack=[
+            {
+                "evidence_index": 1,
+                "source_title": "RAG Eval Guide",
+                "location_label": "???? #1",
+                "excerpt": "Use retrieval, generation, and end-to-end evaluation together.",
+                "llm_excerpt": "Use retrieval, generation, and end-to-end evaluation together.",
+                "source_kind": "external_web",
+            }
+        ],
+        research_mode=True,
+        context_notes=None,
+        evidence_mode="web",
+    )
+
+    assert "\u8054\u7f51\u8865\u5145\u6765\u6e90" in messages[-1]["content"]
+    assert "\u4e0d\u8981\u56e0\u4e3a\u7f3a\u5c11\u9879\u76ee\u5185\u8d44\u6599\u5c31\u9ed8\u8ba4\u62d2\u7b54" in messages[-1]["content"]
+
+
+def test_grounded_generation_disclosure_note_mentions_web_led_answers():
+    grounded_generation = sessions_route_service.grounded_generation
+    note = grounded_generation._build_disclosure_note(
+        {"used_general_knowledge": False, "evidence_status": "grounded"},
+        evidences=[
+            {
+                "source_kind": "external_web",
+                "source_title": "RAG Eval Guide",
+                "canonical_uri": "https://example.com/rag-eval",
+            }
+        ],
+    )
+
+    assert note is not None
+    assert "\u8054\u7f51\u8865\u5145\u6765\u6e90" in note
+
+
+def test_grounded_generation_failure_skips_web_led_disclosure():
+    grounded_generation = sessions_route_service.grounded_generation
+    note = grounded_generation._build_disclosure_note(
+        {"used_general_knowledge": False, "evidence_status": "grounded", "generation_failed": True},
+        evidences=[
+            {
+                "source_kind": "external_web",
+                "source_title": "RAG Eval Guide",
+                "canonical_uri": "https://example.com/rag-eval",
+            }
+        ],
+    )
+
+    assert note is None
+
+
 def test_search_service_uses_conditional_hyde_when_first_pass_is_weak(monkeypatch):
     service = SearchService(llm_service=sessions_route_service.llm)
     calls: list[str] = []

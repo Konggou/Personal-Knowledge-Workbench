@@ -43,6 +43,7 @@ export function ProjectChatClient({
   initialSources,
 }: ProjectChatClientProps) {
   const router = useRouter();
+  const initialSessionId = initialSelectedSession?.id ?? null;
   const [projects, setProjects] = useState(allProjects);
   const [currentProjectSessions, setCurrentProjectSessions] = useState(initialProjectSessions);
   const [selectedSession, setSelectedSession] = useState(initialSelectedSession);
@@ -53,6 +54,18 @@ export function ProjectChatClient({
   const [message, setMessage] = useState("");
   const [deepResearch, setDeepResearch] = useState(false);
   const [webBrowsing, setWebBrowsing] = useState(false);
+  const [sessionComposerModes, setSessionComposerModes] = useState<
+    Record<string, { deepResearch: boolean; webBrowsing: boolean }>
+  >(() =>
+    initialSessionId
+      ? {
+          [initialSessionId]: {
+            deepResearch: false,
+            webBrowsing: false,
+          },
+        }
+      : {},
+  );
   const [showAddSourceMenu, setShowAddSourceMenu] = useState(false);
   const [showWebForm, setShowWebForm] = useState(false);
   const [webUrl, setWebUrl] = useState("");
@@ -86,6 +99,18 @@ export function ProjectChatClient({
     setPreviewSource(null);
     setExpandedSourceLists({});
   }, [project.id, selectedSession?.id]);
+
+  useEffect(() => {
+    if (!selectedSession) {
+      setDeepResearch(false);
+      setWebBrowsing(false);
+      return;
+    }
+
+    const remembered = sessionComposerModes[selectedSession.id];
+    setDeepResearch(remembered?.deepResearch ?? false);
+    setWebBrowsing(remembered?.webBrowsing ?? false);
+  }, [selectedSession, sessionComposerModes]);
 
   const projectTree = useMemo(
     () =>
@@ -126,6 +151,22 @@ export function ProjectChatClient({
           : item,
       ),
     );
+  }
+
+  function updateSessionComposerModes(
+    sessionId: string,
+    next: Partial<{ deepResearch: boolean; webBrowsing: boolean }>,
+  ) {
+    setSessionComposerModes((previous) => {
+      const current = previous[sessionId] ?? { deepResearch: false, webBrowsing: false };
+      return {
+        ...previous,
+        [sessionId]: {
+          ...current,
+          ...next,
+        },
+      };
+    });
   }
 
   async function refreshProjectSources() {
@@ -216,6 +257,7 @@ export function ProjectChatClient({
   async function handleCreateSession() {
     const session = await createSession(project.id);
     upsertCurrentProjectSessions([session, ...currentProjectSessions]);
+    updateSessionComposerModes(session.id, { deepResearch: false, webBrowsing: false });
     setSelectedSession(session);
     setExpandedProjects((previous) => ({ ...previous, [project.id]: true }));
     router.push(`/projects/${project.id}?sessionId=${session.id}`);
@@ -309,8 +351,6 @@ export function ProjectChatClient({
 
     appendStreamingMessages(tempUserMessage, tempAssistantMessage);
     setMessage("");
-    setDeepResearch(false);
-    setWebBrowsing(false);
     setIsStreamingMessage(true);
     setActionError(null);
     let streamFailed = false;
@@ -564,8 +604,22 @@ export function ProjectChatClient({
                 }}
                 onSubmitWebSource={() => void handleWebSourceCreate()}
                 onToggleAddSourceMenu={() => setShowAddSourceMenu((value) => !value)}
-                onToggleDeepResearch={() => setDeepResearch((value) => !value)}
-                onToggleWebBrowsing={() => setWebBrowsing((value) => !value)}
+                onToggleDeepResearch={() => {
+                  if (!selectedSession) {
+                    return;
+                  }
+                  const nextValue = !deepResearch;
+                  setDeepResearch(nextValue);
+                  updateSessionComposerModes(selectedSession.id, { deepResearch: nextValue });
+                }}
+                onToggleWebBrowsing={() => {
+                  if (!selectedSession) {
+                    return;
+                  }
+                  const nextValue = !webBrowsing;
+                  setWebBrowsing(nextValue);
+                  updateSessionComposerModes(selectedSession.id, { webBrowsing: nextValue });
+                }}
                 onWebUrlChange={setWebUrl}
                 projectId={project.id}
                 showAddSourceMenu={showAddSourceMenu}

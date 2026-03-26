@@ -340,6 +340,87 @@ describe("ProjectChatClient", () => {
     );
   });
 
+  it("keeps deep research and web browsing toggles enabled after sending a message", async () => {
+    const project = createProject();
+    const session = createInitialSessionDetail();
+    const finalAssistant = createAssistantMessage();
+    const refreshedSession = {
+      ...session,
+      title_source: "auto" as const,
+      message_count: 2,
+      latest_message_at: "2026-03-13T00:01:00.000Z",
+      messages: [createUserMessage("请继续分析"), finalAssistant],
+    };
+
+    mocks.streamSessionMessage.mockImplementationOnce(async (_input: unknown, handlers: { onEvent: (event: any) => void }) => {
+      handlers.onEvent({ event: "done", data: { message: finalAssistant } });
+    });
+    mocks.getSession.mockResolvedValueOnce(refreshedSession);
+
+    render(
+      <ProjectChatClient
+        allProjects={[project]}
+        initialProjectSessions={createProjectSessions()}
+        initialSelectedSession={session}
+        initialSources={[createKnowledgeSource()]}
+        project={project}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "深度调研" }));
+    fireEvent.click(screen.getByRole("button", { name: "联网补充" }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "请继续分析" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    await waitFor(() => expect(mocks.streamSessionMessage).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "深度调研" })).toHaveAttribute("aria-pressed", "true"));
+    expect(screen.getByRole("button", { name: "联网补充" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("remembers toggle state per session when switching between sessions", async () => {
+    const project = createProject();
+    const firstSession = createInitialSessionDetail();
+    const secondSessionSummary: SessionSummary = {
+      ...createSessionSummary(),
+      id: "session-2",
+      title: "Session Two",
+      latest_message_at: "2026-03-13T00:05:00.000Z",
+    };
+    const secondSessionDetail: SessionDetail = {
+      ...secondSessionSummary,
+      messages: [],
+    };
+
+    mocks.getSession.mockResolvedValueOnce(secondSessionDetail).mockResolvedValueOnce(firstSession);
+
+    render(
+      <ProjectChatClient
+        allProjects={[project]}
+        initialProjectSessions={[createSessionSummary(), secondSessionSummary]}
+        initialSelectedSession={firstSession}
+        initialSources={[createKnowledgeSource()]}
+        project={project}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "深度调研" }));
+    fireEvent.click(screen.getByRole("button", { name: "联网补充" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /Session Two/ }));
+
+    await waitFor(() => expect(mocks.getSession).toHaveBeenCalledWith("session-2"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "深度调研" })).toHaveAttribute("aria-pressed", "false"));
+    expect(screen.getByRole("button", { name: "联网补充" })).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getAllByRole("button", { name: /条消息/ })[0]);
+
+    await waitFor(() => expect(mocks.getSession).toHaveBeenCalledWith("session-1"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "深度调研" })).toHaveAttribute("aria-pressed", "true"));
+    expect(screen.getByRole("button", { name: "联网补充" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("renders a summary card after saving the latest actionable answer", async () => {
     const project = createProject();
     const initialSession = createSessionWithAssistantAnswer();
