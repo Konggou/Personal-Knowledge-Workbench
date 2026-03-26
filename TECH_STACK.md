@@ -1,71 +1,75 @@
-# 个人知识工作台 技术栈与运行策略
+# 技术栈与运行说明
 
-## 1. 总体原则
+## 1. 目标
 
-- 前后端分离
-- SQLite 是唯一结构化状态中心
-- Qdrant 是默认向量检索后端
-- 前台公开语义统一使用：`项目 / 会话 / 消息 / 知识库 / 来源`
-- `task` 只允许作为后端内部实现思路，不作为前台主术语
-- Windows 优先
-- 本地运行优先
-- 尽量减少系统级依赖
+本文记录当前稳定技术选型、运行方式、依赖边界与常用开发命令。
+
+产品规则不在本文重复定义，参考 `PRD.md` 与 `AGENTS.md`。
 
 ## 2. 前端
 
-### 主框架
-
 - `Next.js 16.1.6`
 - `React 19.2.4`
-- `React DOM 19.2.4`
 - `TypeScript 5.9.3`
+- `pnpm`
+- `Vitest` 用于前端测试
 
-### 核心依赖
+前端职责：
 
-- `@tanstack/react-query 5.90.21`
-- `zustand 5.0.11`
-- `zod 4.3.6`
-- `lucide-react 0.577.0`
+- 提供聊天优先 UI
+- 管理项目、会话、知识库、来源与设置页
+- 消费后端公开 API 与流式事件
 
-### UI 基础组件
+## 3. 后端
 
-- `@radix-ui/react-dialog 1.1.15`
-- `@radix-ui/react-dropdown-menu 2.1.16`
-- `@radix-ui/react-scroll-area 1.2.10`
-- `@radix-ui/react-slot 1.2.4`
-- `@radix-ui/react-tooltip 1.2.8`
+- `Python 3.12`
+- `FastAPI`
+- `SQLite`
+- `Qdrant`
+- `pytest` 用于后端测试
 
-### 页面路由
+后端职责：
+
+- 提供项目、会话、知识库、来源、设置 API
+- 维护 grounded retrieval 与生成链路
+- 管理流式消息与证据挂载
+
+## 4. 存储与检索
+
+### 4.1 SQLite
+
+- 唯一结构化状态中心
+- 保存项目、会话、消息、来源、FTS、settings 等数据
+
+### 4.2 Qdrant
+
+- 默认向量检索后端
+- 本地开发默认 embedded 模式
+
+### 4.3 检索栈
+
+- SQLite FTS5 词法检索
+- Qdrant 语义检索
+- RRF 融合
+- 条件 rerank
+
+## 5. 运行模式
+
+- 默认本地单用户运行
+- 不引入多人协作、认证或 workspace 运行假设
+- schema 允许本地直接重建，不做旧数据兼容迁移
+
+## 6. 公开路由与 API 家族
+
+### 6.1 前端公开路由
 
 - `/workspace`
 - `/sessions`
 - `/knowledge`
 - `/settings`
 - `/projects/[projectId]`
-- `/projects/[projectId]?sessionId=...`
 
-### 约束
-
-- SSR 主要服务于页面结构稳定与 URL 组织
-- 项目页是聊天优先界面，不是控制台
-- 不再保留旧的 `/tasks`、`/search`、`/assets`
-
-## 3. 后端
-
-### 主框架
-
-- `Python 3.12`
-- `FastAPI`
-- `Pydantic`
-- `Uvicorn`
-
-### 运行模式
-
-- 单体 API 服务
-- 单进程内承载会话消息、检索、资料入库和生成逻辑
-- 不拆分多服务
-
-### API 语义
+### 6.2 后端公开 API 家族
 
 - `/api/v1/projects`
 - `/api/v1/sessions`
@@ -73,144 +77,59 @@
 - `/api/v1/sources`
 - `/api/v1/settings`
 
-旧的 task 语义不再作为公开主路径。
+## 7. 关键能力开关
 
-## 4. 存储
+- `深度调研`：触发研究型回答路径
+- `联网补充`：允许在项目证据不足时补入网页证据
 
-### 结构化状态
+这两个开关都属于会话内提问行为，不创建新页面或新对象。
 
-- `SQLite`
+## 8. 常用开发命令
 
-负责保存：
+### 8.1 前端
 
-- 项目
-- 项目快照
-- 资料元数据
-- 会话
-- 会话消息
-- 来源挂载关系
-- memory entries
-- FTS 元数据
+```powershell
+corepack pnpm --dir apps/web install
+corepack pnpm --dir apps/web dev
+corepack pnpm --dir apps/web typecheck
+corepack pnpm --dir apps/web exec -- vitest run
+```
 
-### 向量检索
+### 8.2 后端
 
-- `Qdrant`
+```powershell
+cd apps/api
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8010
+.venv\Scripts\python.exe -m pytest -q
+```
 
-默认使用 embedded 模式，可在本地直接运行，无需额外安装独立服务。
+### 8.3 一体联调
 
-## 5. 检索与模型
+- Web 默认：`http://127.0.0.1:3000`
+- API 默认：`http://127.0.0.1:8010`
+- 健康检查：`/api/v1/health`
 
-### 检索链
+## 9. benchmark 与评测
 
-当前主检索链为：
+- retrieval benchmark 用于校准默认检索参数
+- benchmark 不是前台调参平台
+- benchmark 推荐默认值必须与运行时默认值保持一致
 
-- `SQLite FTS5 MATCH`
-- `bm25(...)`
-- `Qdrant semantic recall`
-- `RRF` 融合
-- 有界 rerank
+当前默认基线：
 
-### rerank 能力
+- `retrieval_mode=hybrid`
+- `lexical_candidate_limit=8`
+- `semantic_candidate_limit=8`
+- `rrf_k=30`
+- `reranker_top_n=4`
+- `hyde_policy=off`
+- `final_retrieval_limit=3`
 
-- `rule`
-- `cross_encoder_local`
-- `cross_encoder_remote`
+## 10. 文档边界
 
-### 模型能力
-
-- `sentence-transformers` 负责 embedding
-- LLM 负责：
-  - 普通对话
-  - grounded 回答生成
-  - 深度调研生成
-
-### 默认策略
-
-- 默认网页聊天优先走低延迟路径
-- 当本轮消息没有开启：
-  - `深度调研`
-  - `联网补充`
-  planner 与 readiness 优先走启发式
-
-## 6. 实时通信
-
-- SSE 用于会话流式事件
-- 当前主要承载：
-  - status
-  - delta
-  - done
-
-## 7. 测试栈
-
-### 前端
-
-- `Vitest`
-- `@testing-library/react`
-- `Playwright`
-- `TypeScript typecheck`
-
-### 后端
-
-- `pytest`
-- `compileall`
-- 本地 retrieval eval runner
-
-## 8. 数据清理
-
-### CleanupService
-
-自动清理超过 30 天的软删除数据：
-
-- **触发时机**：API 启动时异步执行
-- **清理对象**：
-  - 已归档项目（status='archived'）
-  - 已删除会话（deleted_at 不为空）
-  - 已删除来源（deleted_at 不为空）
-- **级联清理**：项目删除会级联清理所有关联数据（会话、消息、来源、chunks、Qdrant 向量）
-- **手动触发**：`POST /api/v1/admin/cleanup`
-- **预览接口**：`GET /api/v1/admin/cleanup/preview`
-
-## 9. 启动策略
-
-仓库根目录可直接运行：
-
-- `.\scripts\dev.ps1`
-- `.\scripts\start-api.ps1`
-- `.\scripts\start-web.ps1`
-
-默认本地链路：
-
-- Web：`http://127.0.0.1:3000`
-- API：`http://127.0.0.1:8010`
-
-## 10. 版本演进摘要
-
-### V2
-
-- 上下文改写
-- 条件 HyDE
-- structured chunking
-- evidence selection
-- retrieval eval
-
-### 当前运行时能力
-
-- 聊天优先 Agent 运行时
-- `联网补充`
-- memory entries
-- external web evidence
-
-### 当前检索能力
-
-- `FTS5 + bm25`
-- `RRF`
-- 独立 reranker
-- retrieval index version
-- 默认聊天低延迟优化
-
-### 当前产品能力
-
-- 软删除 + CleanupService（自动清理过期数据）
-- 项目删除功能
-- 统一深色主题 UI
-- `项目 / 会话 / 消息 / 知识库 / 来源` 完整链路
+- 产品定义：`PRD.md`
+- 用户流程：`APP_FLOW.md`
+- 前端布局与交互：`FRONTEND_GUIDELINES.md`
+- 后端结构与 API：`BACKEND_STRUCTURE.md`
+- 当前阶段实施安排：`IMPLEMENTATION_PLAN.md`
+- 已完成历史：`progress.txt`
