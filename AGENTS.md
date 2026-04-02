@@ -1,52 +1,66 @@
-# Project Identity
-本项目是本地运行、聊天优先的个人知识工作台。
-- `项目` = 知识库容器
-- `会话` = 项目内对话线程
-- `消息` = 主要交互单元
-- `来源` = 回答底部可展开的轻量证据层
-- `知识库` = 资料管理页
+# Agent Operating Guide
 
-# Non-Negotiable
-1. 不得做回 task-first 工作台。
-2. 不得重新暴露 `/tasks`、`/search`、`/assets` 路由心智。
-3. 不得把 `task` 作为前台主术语。
-4. 不得擅自扩展到多人协作、认证或 workspace。
-5. 必须优先保证主闭环：创建项目 / 新建会话 / 增加资料 / 项目内提问 / 查看来源。
-6. 产品好用优先于技术炫技。
+## Start Here
+1. Read `progress.txt`.
+2. Open the active execution plan referenced there.
+3. Read `docs/DESIGN.md` for the design index.
+4. Open only the detailed docs needed for the task.
 
-# Frontend Terms
-- 统一使用：项目 / 会话 / 消息 / 知识库 / 来源 / 深度调研 / 保存为摘要 / 生成报告
-- 不要在前台主文案里使用：`task` / `asset` / `task detail`
+## Source Of Truth
+- Current implementation truth: repository code and tests.
+- Product and target-state truth: `docs/PRD.md` and `docs/APP_FLOW.md`.
+- Technical and architecture truth: `docs/TECH_STACK.md` and files under `docs/design-docs/`.
+- Active execution truth for the current thread: the file in `docs/exec-plans/active/` referenced by `progress.txt`.
 
-# Hard Guardrails
-- 项目页固定为：顶部轻导航 + 左侧项目树 sidebar + 中间聊天主区。
-- 不要常驻右侧知识库栏，不要大型项目头部。
-- sidebar 收起后必须缩成窄 rail，并让中间真实变宽。
-- 中间消息列与底部输入框必须共用同一中轴。
-- 来源气泡先展开标题列表，再进入覆盖式详细预览。
-- 摘要卡和报告卡必须留在会话里，不跳独立页面。
-- 视觉方向：聊天优先、Academic Editorial 深色主题、暖金强调 `#e6a845`、少卡片少阴影。
-- SQLite 是唯一结构化状态中心；Qdrant 是默认向量检索后端。
-- 本地 schema 允许直接重建，不做旧数据兼容迁移。
-- 删除遵循软删除语义。
-- 前台不得依赖旧 task API。
-- 普通 grounded 复杂问题只触发 rerank，不自动升级为深度调研。
-- 来源气泡只代表最终证据集。
-- 内部可保留 task-like orchestration，但前台只能看到：会话 / 消息 / 状态卡 / 结果卡。
+When docs conflict:
+1. Latest explicit user instruction
+2. Repository code for current behavior
+3. `docs/PRD.md`
+4. `docs/APP_FLOW.md`
+5. `docs/TECH_STACK.md`
+6. `docs/DESIGN.md` and linked detailed design docs
+7. `progress.txt`
 
-# Public Surface
-- Routes: `/workspace` `/sessions` `/knowledge` `/settings` `/projects/[projectId]`
-- APIs: `/api/v1/projects` `/api/v1/sessions` `/api/v1/knowledge` `/api/v1/sources` `/api/v1/settings`
+## Product Boundaries
+- Product identity: a local-first, chat-first personal knowledge workbench.
+- Primary mental model: project -> session -> message -> sources.
+- Keep the core loop intact: create project, create session, add sources, ask inside a project, inspect sources.
+- Do not revert to a task-first product.
+- Do not reintroduce `/tasks`, `/search`, or `/assets` as front-stage product surfaces.
+- Do not add multi-user collaboration, authentication, or workspace-centric scope unless explicitly requested.
 
-# Where To Look
-- 产品定义、目标、边界： [PRD.md](/Users/user/Desktop/agentic_rag/PRD.md)
-- 页面流程、用户路径： [APP_FLOW.md](/Users/user/Desktop/agentic_rag/APP_FLOW.md)
-- 前端布局、视觉、交互细则： [FRONTEND_GUIDELINES.md](/Users/user/Desktop/agentic_rag/FRONTEND_GUIDELINES.md)
-- 后端结构、服务边界、数据流： [BACKEND_STRUCTURE.md](/Users/user/Desktop/agentic_rag/BACKEND_STRUCTURE.md)
-- 技术栈与运行约束： [TECH_STACK.md](/Users/user/Desktop/agentic_rag/TECH_STACK.md)
-- 当前实施计划： [IMPLEMENTATION_PLAN.md](/Users/user/Desktop/agentic_rag/IMPLEMENTATION_PLAN.md)
-- 最新进展与历史记录： [progress.txt](/Users/user/Desktop/agentic_rag/progress.txt)
+## Public Surface
+- Routes: `/workspace`, `/sessions`, `/knowledge`, `/settings`, `/projects/[projectId]`
+- API families: `/api/v1/projects`, `/api/v1/sessions`, `/api/v1/knowledge`, `/api/v1/sources`, `/api/v1/settings`
 
-# Conflict Resolution
-优先级：`PRD.md` > `APP_FLOW.md` > `BACKEND_STRUCTURE.md` / `FRONTEND_GUIDELINES.md` > `TECH_STACK.md` > `IMPLEMENTATION_PLAN.md` > `AGENTS.md`
-说明：`AGENTS.md` 只是执行入口，不是产品事实重写层；若冲突，以上层文档为准。
+## Data And Backend Constraints
+- SQLite is the only structured state store.
+- Qdrant is the default vector retrieval backend.
+- Soft delete semantics apply to user-facing deletion flows.
+- Local schema rebuilds are allowed; backward-compatible migrations are not required by default.
+
+## Frontend Constraints
+- Project page stays: light top navigation, left sidebar / rail, centered chat column, bottom composer on the same axis.
+- No persistent right-side knowledge panel.
+- Summary cards and report cards remain inside the session timeline.
+- Sources open from lightweight evidence chips into an overlay-style detailed preview.
+
+## Documentation Map
+- Product requirements: `docs/PRD.md`
+- App flow: `docs/APP_FLOW.md`
+- Technical baseline: `docs/TECH_STACK.md`
+- Design index: `docs/DESIGN.md`
+- Frontend detail: `docs/design-docs/frontend/`
+- Backend detail: `docs/design-docs/backend/`
+- Active plans: `docs/exec-plans/active/`
+- Completed plans: `docs/exec-plans/completed/`
+
+## Execution Memory Rules
+- `progress.txt` is mandatory and must stay current.
+- Store step-by-step plans in `docs/exec-plans/active/`.
+- Move finished plans into `docs/exec-plans/completed/`.
+- Keep `AGENTS.md` short; put durable detail in `docs/`.
+
+## Verification Expectations
+- Before claiming completion, run the narrowest meaningful verification for the files changed.
+- Record any remaining gaps or flaky commands in the active execution plan and in the final response.
