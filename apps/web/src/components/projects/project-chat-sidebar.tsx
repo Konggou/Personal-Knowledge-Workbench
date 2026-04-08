@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import type { ProjectSummary, SessionDetail, SessionSummary } from "@/lib/api";
 
 import { projectInitials } from "./project-chat-helpers";
@@ -39,6 +41,33 @@ export function ProjectChatSidebar({
   onRenameSession,
   onDeleteSession,
 }: ProjectChatSidebarProps) {
+  const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setOpenMenuSessionId(null);
+      }
+    }
+
+    if (openMenuSessionId) {
+      document.addEventListener("mousedown", handlePointerDown);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [openMenuSessionId]);
+
+  useEffect(() => {
+    setOpenMenuSessionId(null);
+  }, [selectedSession?.id, sidebarCollapsed]);
+
+  function closeMenu() {
+    setOpenMenuSessionId(null);
+  }
+
   return (
     <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`.trim()}>
       <div className={styles.sidebarTop}>
@@ -88,22 +117,22 @@ export function ProjectChatSidebar({
                   <span className={styles.projectBadge}>{projectInitials(item.name)}</span>
                   <span className={styles.projectMeta}>
                     <strong>{item.name}</strong>
-                    <span>
-                      {item.active_source_count} 份资料 · {item.active_session_count} 个会话
-                    </span>
+                    <span>{item.active_source_count} 份资料</span>
                   </span>
                 </button>
-                <button
-                  aria-label={item.expanded ? `收起 ${item.name}` : `展开 ${item.name}`}
-                  className={styles.projectToggleButton}
-                  onClick={() => onToggleProject(item.id)}
-                  type="button"
-                >
-                  {item.expanded ? "-" : "+"}
-                </button>
+                {item.id === project.id ? (
+                  <button
+                    aria-label={item.expanded ? `收起 ${item.name}` : `展开 ${item.name}`}
+                    className={styles.projectToggleButton}
+                    onClick={() => onToggleProject(item.id)}
+                    type="button"
+                  >
+                    {item.expanded ? "−" : "+"}
+                  </button>
+                ) : null}
               </div>
 
-              {item.expanded ? (
+              {item.id === project.id && item.expanded ? (
                 <div className={styles.sessionList}>
                   {item.sessions.length ? (
                     item.sessions.map((session) => (
@@ -118,18 +147,63 @@ export function ProjectChatSidebar({
                           type="button"
                         >
                           <strong>{session.title}</strong>
-                          <span>{session.message_count} 条消息</span>
                         </button>
-                        {item.id === project.id ? (
-                          <div className={styles.sessionItemActions}>
-                            <button onClick={() => onRenameSession(session)} type="button">
-                              重命名
-                            </button>
-                            <button onClick={() => onDeleteSession(session.id)} type="button">
-                              删除
-                            </button>
-                          </div>
-                        ) : null}
+                        <div
+                          className={styles.sessionItemActions}
+                          onBlur={(event) => {
+                            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                              closeMenu();
+                            }
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              closeMenu();
+                            }
+                          }}
+                          onMouseLeave={() => {
+                            if (openMenuSessionId === session.id) {
+                              closeMenu();
+                            }
+                          }}
+                          ref={openMenuSessionId === session.id ? menuRef : null}
+                        >
+                          <button
+                            aria-expanded={openMenuSessionId === session.id}
+                            aria-haspopup="menu"
+                            aria-label={`${session.title} 的更多操作`}
+                            className={styles.sessionMenuButton}
+                            onClick={() => setOpenMenuSessionId((current) => (current === session.id ? null : session.id))}
+                            type="button"
+                          >
+                            ···
+                          </button>
+                          {openMenuSessionId === session.id ? (
+                            <div className={styles.sessionMenu} role="menu">
+                              <button
+                                onClick={() => {
+                                  closeMenu();
+                                  onRenameSession(session);
+                                }}
+                                role="menuitem"
+                                type="button"
+                              >
+                                重命名
+                              </button>
+                              <button
+                                className={styles.sessionMenuDanger}
+                                onClick={() => {
+                                  closeMenu();
+                                  onDeleteSession(session.id);
+                                }}
+                                role="menuitem"
+                                type="button"
+                              >
+                                删除
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       </article>
                     ))
                   ) : (

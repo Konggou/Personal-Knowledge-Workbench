@@ -1,5 +1,5 @@
 /* ==========================================================================
-   个人知识工作台 - 学术编辑室主题 (Dark Immersive + Editorial)
+   个人知识工作台 - 浅色阅读主题 (Warm Editorial Light)
    ========================================================================== */
 
 /* 
@@ -11,53 +11,53 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ==========================================================================
-   CSS Variables - 深墨沉浸主题
+   CSS Variables - 浅色阅读主题
    ========================================================================== */
 :root {
-  /* 画布层级 - 深墨底 */
-  --bg-canvas: #0a0c0f;
-  --bg-canvas-subtle: #0f1419;
-  --bg-surface: #14181f;
-  --bg-surface-elevated: #1a1f28;
-  --bg-elevated: #222830;
-  
-  /* 边框 - 微妙的层级感 */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --border-accent: rgba(255, 255, 255, 0.18);
-  
-  /* 文字 - 羊皮纸质感 */
-  --text-primary: #f5f0e6;
-  --text-secondary: #d4cbb8;
-  --text-tertiary: #a69b8a;
-  --text-muted: #7a7163;
-  
+  /* 画布层级 */
+  --bg-canvas: #f6f2ea;
+  --bg-canvas-subtle: #efe7dc;
+  --bg-surface: rgba(255, 252, 247, 0.94);
+  --bg-surface-elevated: #fffdfa;
+  --bg-elevated: #f3ede3;
+
+  /* 边框 */
+  --border-subtle: rgba(114, 89, 53, 0.12);
+  --border-strong: rgba(114, 89, 53, 0.2);
+  --border-accent: rgba(114, 89, 53, 0.3);
+
+  /* 文字 */
+  --text-primary: #241b10;
+  --text-secondary: #51402c;
+  --text-tertiary: #7a6549;
+  --text-muted: #9a876d;
+
   /* 强调色 - 暖琥珀 */
   --accent-primary: #e6a845;
-  --accent-primary-hover: #f0b856;
-  --accent-soft: rgba(230, 168, 69, 0.12);
-  --accent-glow: rgba(230, 168, 69, 0.24);
-  
+  --accent-primary-hover: #d89a34;
+  --accent-soft: rgba(230, 168, 69, 0.14);
+  --accent-glow: rgba(230, 168, 69, 0.18);
+
   /* 功能色 */
-  --accent-link: #7eb8da;
-  --warning-bg: rgba(230, 168, 69, 0.1);
-  --warning-text: #e6a845;
-  --danger-bg: rgba(220, 90, 90, 0.1);
-  --danger-text: #dc7a7a;
-  --success-bg: rgba(100, 180, 120, 0.1);
-  --success-text: #7dbd8e;
-  
-  /* 阴影 - 深墨中的微光 */
-  --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.4);
-  --shadow-raised: 0 12px 48px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 40px rgba(230, 168, 69, 0.08);
+  --accent-link: #3e7397;
+  --warning-bg: rgba(230, 168, 69, 0.12);
+  --warning-text: #9f6512;
+  --danger-bg: rgba(199, 97, 82, 0.12);
+  --danger-text: #a4493c;
+  --success-bg: rgba(107, 161, 103, 0.14);
+  --success-text: #426f46;
+
+  /* 阴影 */
+  --shadow-soft: 0 10px 34px rgba(106, 78, 41, 0.08);
+  --shadow-raised: 0 16px 42px rgba(106, 78, 41, 0.12);
+  --shadow-glow: 0 10px 30px rgba(230, 168, 69, 0.08);
   
   /* 字体 */
   --font-display: 'DM Serif Display', Georgia, serif;
   --font-body: 'Instrument Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
   
-  /* 圆角 - 更克制的编辑感 */
+  /* 圆角 */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
@@ -102,7 +102,9 @@ body {
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.6;
-  background: var(--bg-canvas);
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.78), transparent 36%),
+    linear-gradient(180deg, #fbf7f1 0%, var(--bg-canvas) 100%);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -111,8 +113,8 @@ body {
 
 /* 选中文本样式 */
 ::selection {
-  background: var(--accent-soft);
-  color: var(--accent-primary);
+  background: rgba(230, 168, 69, 0.22);
+  color: var(--text-primary);
 }
 
 /* 滚动条 - 极简暗色 */
@@ -131,7 +133,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 85%, white 15%);
 }
 
 /* ==========================================================================

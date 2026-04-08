@@ -115,33 +115,31 @@
 
 ## 启动方式
 
-在仓库根目录 `C:\Users\user\Desktop\agentic_rag` 下运行。
+在仓库根目录下运行，Windows / Linux / macOS 命令一致。
+
+### 首次安装依赖
+
+```sh
+corepack pnpm install
+```
 
 ### 一键启动
 
-```powershell
-.\scripts\dev.ps1
+```sh
+pnpm dev
 ```
 
-### 分开启动
+API 和 Web 并发启动，带 `[api]` / `[web]` 彩色前缀输出。
 
-启动 API：
+### 启动外部 Qdrant（可选）
 
-```powershell
-.\scripts\start-api.ps1
+默认使用 embedded Qdrant，无需额外操作。如需外部独立服务：
+
+```sh
+node scripts/start-qdrant.mjs
 ```
 
-启动 Web：
-
-```powershell
-.\scripts\start-web.ps1
-```
-
-如果 PowerShell 默认禁止脚本执行：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
-```
+启动后设置 `WORKBENCH_QDRANT_URL` 指向该服务，再运行 `pnpm dev`。
 
 启动后访问：
 
@@ -152,17 +150,27 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 
 ### 后端
 
-```powershell
-apps/api/.venv/Scripts/python.exe -m compileall apps/api/app
-apps/api/.venv/Scripts/python.exe -m pytest tests/backend
-apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite all
-apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite benchmark --matrix smoke
-apps/api/.venv/Scripts/python.exe scripts/run_retrieval_eval.py --suite benchmark --matrix smoke --summary-only
+**Windows：**
+```sh
+apps/api/.venv/Scripts/python -m compileall apps/api/app
+apps/api/.venv/Scripts/python -m pytest tests/backend
+apps/api/.venv/Scripts/python scripts/run_retrieval_eval.py --suite all
+apps/api/.venv/Scripts/python scripts/run_retrieval_eval.py --suite benchmark --matrix smoke
+apps/api/.venv/Scripts/python scripts/run_retrieval_eval.py --suite benchmark --matrix smoke --summary-only
+```
+
+**Linux / macOS：**
+```sh
+apps/api/.venv/bin/python -m compileall apps/api/app
+apps/api/.venv/bin/python -m pytest tests/backend
+apps/api/.venv/bin/python scripts/run_retrieval_eval.py --suite all
+apps/api/.venv/bin/python scripts/run_retrieval_eval.py --suite benchmark --matrix smoke
+apps/api/.venv/bin/python scripts/run_retrieval_eval.py --suite benchmark --matrix smoke --summary-only
 ```
 
 ### 前端
 
-```powershell
+```sh
 corepack pnpm --dir apps/web typecheck
 corepack pnpm --dir apps/web test -- --run
 corepack pnpm --dir apps/web build

@@ -11,7 +11,7 @@
   display: grid;
   gap: var(--space-6);
   padding: 52px 36px 40px;
-  background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-surface-elevated) 100%);
+  background: rgba(255, 252, 247, 0.94);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-soft);
@@ -24,7 +24,7 @@
   inset: 0 0 auto 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
-  opacity: 0.45;
+  opacity: 0.2;
 }
 
 .sectionHeader {

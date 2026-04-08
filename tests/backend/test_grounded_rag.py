@@ -423,6 +423,133 @@ def test_grounded_generation_failure_skips_web_led_disclosure():
     assert note is None
 
 
+def test_grounded_generation_falls_back_to_relaxed_web_answer(monkeypatch):
+    grounded_generation = sessions_route_service.grounded_generation
+
+    monkeypatch.setattr(
+        grounded_generation.llm,
+        "generate_grounded_reply",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("strict json failed")),
+    )
+    monkeypatch.setattr(
+        grounded_generation.llm,
+        "generate_grounded_reply_fallback",
+        lambda **kwargs: {
+            "answer_md": "主要结论基于联网补充来源：Modular RAG 强调模块解耦、独立评测与可替换编排。",
+            "used_general_knowledge": False,
+            "evidence_status": "grounded",
+        },
+    )
+
+    answer = grounded_generation.generate_answer(
+        history=[{"message_type": "user_prompt", "content_md": "具体介绍一下 Modular RAG"}],
+        query="具体介绍一下 Modular RAG",
+        research_mode=False,
+        context_notes=None,
+        evidences=[
+            {
+                "evidence_index": 1,
+                "source_title": "Modular RAG Guide",
+                "location_label": "Web #1",
+                "excerpt": "Modular RAG separates retrieval, routing, synthesis, and evaluation stages.",
+                "llm_excerpt": "Modular RAG separates retrieval, routing, synthesis, and evaluation stages.",
+                "source_kind": "external_web",
+                "canonical_uri": "https://example.com/modular-rag",
+            }
+        ],
+    )
+
+    assert "基于联网补充来源" in answer["answer_md"]
+    assert answer["source_mode"] == "project_grounded"
+    assert answer["evidence_status"] == "grounded"
+
+
+def test_generate_grounded_reply_fallback_parses_json_payload(monkeypatch):
+    service = LLMService()
+
+    monkeypatch.setattr(service, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        service,
+        "_complete_messages",
+        lambda **kwargs: '```json\n{"answer_md":"Recovered fallback answer.","used_general_knowledge":false,"evidence_status":"grounded"}\n```',
+    )
+
+    answer = service.generate_grounded_reply_fallback(
+        conversation=[{"message_type": "user_prompt", "content_md": "What is Modular RAG?"}],
+        evidence_pack=[
+            {
+                "evidence_index": 1,
+                "source_title": "Modular RAG Guide",
+                "location_label": "Web #1",
+                "excerpt": "Modular RAG separates retrieval, routing, synthesis, and evaluation stages.",
+                "llm_excerpt": "Modular RAG separates retrieval, routing, synthesis, and evaluation stages.",
+                "source_kind": "external_web",
+            }
+        ],
+        research_mode=False,
+        context_notes=None,
+        evidence_mode="web",
+    )
+
+    assert answer["answer_md"] == "Recovered fallback answer."
+    assert answer["used_general_knowledge"] is False
+    assert answer["evidence_status"] == "grounded"
+
+
+def test_stream_grounded_generation_falls_back_before_first_chunk(monkeypatch):
+    grounded_generation = sessions_route_service.grounded_generation
+
+    def fake_stream_grounded_reply(**kwargs):
+        raise RuntimeError("stream strict json failed")
+        yield ""
+
+    monkeypatch.setattr(
+        grounded_generation.llm,
+        "stream_grounded_reply",
+        fake_stream_grounded_reply,
+    )
+    monkeypatch.setattr(
+        grounded_generation.llm,
+        "generate_grounded_reply_fallback",
+        lambda **kwargs: {
+            "answer_md": "主要结论基于联网补充来源：Modular RAG 可以把检索、路由和综合拆成可替换模块。",
+            "used_general_knowledge": False,
+            "evidence_status": "grounded",
+        },
+    )
+
+    iterator = grounded_generation.stream_generate_answer(
+        history=[{"message_type": "user_prompt", "content_md": "具体介绍一下 Modular RAG"}],
+        query="具体介绍一下 Modular RAG",
+        research_mode=False,
+        context_notes=None,
+        evidences=[
+            {
+                "evidence_index": 1,
+                "source_title": "Modular RAG Guide",
+                "location_label": "Web #1",
+                "excerpt": "Modular RAG separates retrieval, routing, synthesis, and evaluation stages.",
+                "llm_excerpt": "Modular RAG separates retrieval, routing, synthesis, and evaluation stages.",
+                "source_kind": "external_web",
+                "canonical_uri": "https://example.com/modular-rag",
+            }
+        ],
+    )
+
+    chunks: list[str] = []
+    while True:
+        try:
+            chunks.append(next(iterator))
+        except StopIteration as stop:
+            payload = stop.value
+            break
+
+    assert "".join(chunks) == payload["answer_md"]
+    assert "基于联网补充来源" in payload["answer_md"]
+    assert payload["source_mode"] == "project_grounded"
+    assert payload["evidence_status"] == "grounded"
+
+
 def test_search_service_uses_conditional_hyde_when_first_pass_is_weak(monkeypatch):
     service = SearchService(llm_service=sessions_route_service.llm)
     calls: list[str] = []

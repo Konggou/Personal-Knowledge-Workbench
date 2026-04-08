@@ -18,13 +18,13 @@
 .shell {
   height: 100vh;
   padding-top: 84px;
-  background: var(--bg-canvas);
+  background: transparent;
   overflow: hidden;
 }
 
 .layout {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: 288px minmax(0, 1fr);
   height: calc(100vh - 84px);
   transition: grid-template-columns var(--duration-slow) var(--ease-out-expo);
 }
@@ -45,9 +45,9 @@
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  border-right: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-  padding: var(--space-4) 14px;
+  border-right: 1px solid rgba(114, 89, 53, 0.12);
+  background: rgba(255, 251, 246, 0.82);
+  padding: 18px 14px 22px;
 }
 
 .sidebar::before {
@@ -60,8 +60,8 @@
   background: linear-gradient(
     180deg,
     transparent 0%,
-    var(--border-strong) 20%,
-    var(--border-strong) 80%,
+    rgba(114, 89, 53, 0.16) 20%,
+    rgba(114, 89, 53, 0.16) 80%,
     transparent 100%
   );
 }
@@ -87,19 +87,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.84);
   color: var(--text-secondary);
   font-size: 14px;
   transition: all var(--duration-base) var(--ease-out-expo);
   flex-shrink: 0;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(114, 89, 53, 0.12);
 }
 
 .collapseButton:hover {
-  background: var(--accent-soft);
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
+  background: #fffdfa;
+  color: var(--text-primary);
+  border-color: rgba(114, 89, 53, 0.22);
 }
 
 .collapseGlyph {
@@ -110,11 +110,11 @@
 /* 新建会话按钮 */
 .newSessionButton {
   flex: 1;
-  height: 34px;
-  padding: 0 16px;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--accent-primary) 92%, #f5d08a 8%);
-  color: var(--bg-canvas);
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f0b24e, #e6a845);
+  color: #fffdfa;
   font-size: 0.875rem;
   font-weight: 600;
   transition: all var(--duration-base) var(--ease-out-expo);
@@ -123,7 +123,7 @@
 
 .newSessionButton:hover {
   background: var(--accent-primary-hover);
-  box-shadow: 0 0 20px var(--accent-glow);
+  box-shadow: var(--shadow-glow);
   transform: translateY(-1px);
 }
 
@@ -159,75 +159,73 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
-  background: var(--bg-elevated);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.82);
   color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 600;
   transition: all var(--duration-base) var(--ease-out-expo);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(114, 89, 53, 0.12);
 }
 
 .railProjectButton:hover {
-  background: var(--bg-surface-elevated);
+  background: #fffdfa;
   color: var(--text-primary);
-  border-color: var(--border-strong);
+  border-color: rgba(114, 89, 53, 0.2);
 }
 
 .railProjectButtonActive {
-  background: var(--accent-soft);
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 16px var(--accent-glow);
+  background: rgba(230, 168, 69, 0.16);
+  color: #8f5b10;
+  border-color: rgba(230, 168, 69, 0.4);
+  box-shadow: none;
 }
 
 /* 展开式项目树 */
 .projectTree {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   overflow-y: auto;
   padding-right: 4px;
 }
 
 .projectSection {
-  border-radius: 12px;
-  padding: 6px 4px 8px;
+  border-radius: 18px;
+  padding: 4px 0;
   transition: all var(--duration-base) var(--ease-out-expo);
-  border: 1px solid transparent;
   background: transparent;
 }
 
 .projectSection:hover {
-  background: rgba(255, 255, 255, 0.01);
+  background: transparent;
 }
 
 .projectSectionActive {
-  background: rgba(230, 168, 69, 0.05);
-  border-color: rgba(230, 168, 69, 0.16);
-  box-shadow: inset 0 1px 0 rgba(230, 168, 69, 0.08);
+  background: transparent;
 }
 
 .projectRow {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-height: 46px;
 }
 
 .projectButton {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 4px 6px;
-  border-radius: 10px;
+  gap: 10px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 16px;
   text-align: left;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-out-expo);
 }
 
 .projectButton:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .projectBadge {
@@ -236,19 +234,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9px;
-  background: var(--bg-elevated);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.84);
   color: var(--text-secondary);
   font-size: 0.75rem;
   font-weight: 700;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(114, 89, 53, 0.12);
   flex-shrink: 0;
 }
 
 .projectSectionActive .projectBadge {
-  background: var(--accent-primary);
-  color: var(--bg-canvas);
-  border-color: transparent;
+  background: rgba(230, 168, 69, 0.18);
+  color: #8f5b10;
+  border-color: rgba(230, 168, 69, 0.22);
 }
 
 .projectMeta {
@@ -259,8 +257,8 @@
 }
 
 .projectMeta strong {
-  font-size: 0.875rem;
-  font-weight: 550;
+  font-size: 0.9rem;
+  font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -268,14 +266,14 @@
 }
 
 .projectMeta span {
-  font-size: 0.6875rem;
-  color: var(--text-tertiary);
+  font-size: 0.74rem;
+  color: var(--text-muted);
 }
 
 .projectToggleButton {
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
@@ -284,8 +282,8 @@
 }
 
 .projectToggleButton:hover {
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-primary);
 }
 
 /* 会话列表 */
@@ -293,10 +291,10 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-top: 6px;
-  margin-left: 8px;
-  padding-left: 10px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 4px;
+  margin-left: 22px;
+  padding-left: 16px;
+  border-left: 1px solid rgba(114, 89, 53, 0.12);
 }
 
 .sidebarEmpty {
@@ -309,45 +307,48 @@
 
 .sessionItem {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 7px 8px;
-  border-radius: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 8px 4px 0;
+  border-radius: 12px;
   transition: all var(--duration-fast) var(--ease-out-expo);
 }
 
 .sessionItem:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.48);
 }
 
 .sessionItemActive {
-  background: rgba(230, 168, 69, 0.05);
-  box-shadow: inset 0 0 0 1px rgba(230, 168, 69, 0.08);
+  background: rgba(230, 168, 69, 0.08);
 }
 
 .sessionItemActive::before {
   content: '';
   position: absolute;
-  left: -12px;
+  left: -17px;
   top: 50%;
   transform: translateY(-50%);
   width: 2px;
-  height: 12px;
+  height: 18px;
   background: var(--accent-primary);
   border-radius: 0 2px 2px 0;
 }
 
 .sessionSelect {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
   text-align: left;
   cursor: pointer;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 12px;
 }
 
 .sessionSelect strong {
-  font-size: 0.78125rem;
+  font-size: 0.84rem;
   font-weight: 500;
   color: var(--text-secondary);
   overflow: hidden;
@@ -357,31 +358,90 @@
 }
 
 .sessionItem:hover .sessionSelect strong,
-.sessionItemActive .sessionSelect strong {
+.sessionItemActive .sessionSelect strong,
+.sessionSelect:focus-visible strong {
   color: var(--text-primary);
 }
 
-.sessionSelect span {
-  font-size: 0.6875rem;
-  color: var(--text-tertiary);
+.sessionSelect:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .sessionItemActions {
+  position: relative;
   display: flex;
-  gap: 8px;
-  padding-left: 2px;
+  align-items: center;
 }
 
-.sessionItemActions button {
-  font-size: 0.6875rem;
+.sessionMenuButton {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
   color: var(--text-tertiary);
-  transition: color var(--duration-fast) var(--ease-out-expo);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-out-expo),
+    visibility 0s linear var(--duration-fast),
+    background var(--duration-fast) var(--ease-out-expo),
+    color var(--duration-fast) var(--ease-out-expo);
 }
 
-.sessionItemActions button:hover {
-  color: var(--accent-primary);
+.sessionItem:hover .sessionMenuButton,
+.sessionItem:focus-within .sessionMenuButton,
+.sessionMenuButton[aria-expanded="true"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.sessionMenuButton:hover,
+.sessionMenuButton:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-primary);
+}
+
+.sessionMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 112px;
+  display: grid;
+  padding: 6px;
+  background: #fffdfa;
+  border: 1px solid rgba(114, 89, 53, 0.14);
+  border-radius: 14px;
+  box-shadow: var(--shadow-soft);
+  z-index: 20;
+}
+
+.sessionMenu button {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  text-align: left;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.sessionMenu button:hover,
+.sessionMenu button:focus-visible {
+  outline: none;
+  background: rgba(230, 168, 69, 0.1);
+  color: var(--text-primary);
+}
+
+.sessionMenuDanger {
+  color: var(--danger-text) !important;
 }
 
 /* ==========================================================================
@@ -393,21 +453,21 @@
   grid-template-rows: minmax(0, 1fr) auto;
   height: 100%;
   overflow: hidden;
-  background: var(--bg-canvas);
+  background: transparent;
 }
 
 .chatScroll {
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 24px 28px 18px;
+  padding: 26px 24px 18px;
   scroll-behavior: smooth;
 }
 
 /* 编辑式页边距 */
 .chatColumn {
-  max-width: 800px;
+  max-width: 980px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 24px;
 }
 
 /* 空状态 */
@@ -534,12 +594,12 @@
 }
 
 .userMessage {
-  max-width: 85%;
-  background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-subtle);
+  max-width: min(88%, 760px);
+  background: rgba(255, 251, 246, 0.96);
+  border: 1px solid rgba(114, 89, 53, 0.12);
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
   padding: var(--space-4) var(--space-5);
-  box-shadow: var(--shadow-soft);
+  box-shadow: 0 10px 28px rgba(106, 78, 41, 0.08);
 }
 
 .userMessage p {
@@ -565,7 +625,7 @@
   color: var(--text-primary);
   margin: 0;
   padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid rgba(114, 89, 53, 0.12);
 }
 
 /* Markdown 内容 */
@@ -897,15 +957,15 @@
 .composerDock {
   position: relative;
   z-index: 10;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border-subtle);
-  padding: 0 28px;
+  background: rgba(247, 241, 233, 0.88);
+  border-top: 1px solid rgba(114, 89, 53, 0.12);
+  padding: 0 24px;
 }
 
 .composerColumn {
-  max-width: 800px;
+  max-width: 980px;
   margin: 0 auto;
-  padding: 12px 20px 14px;
+  padding: 12px 24px 16px;
 }
 
 .composerMetaRow {
@@ -943,8 +1003,8 @@
   flex: 1;
   height: 36px;
   padding: 0 var(--space-4);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(114, 89, 53, 0.12);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 0.9375rem;
@@ -1005,9 +1065,9 @@
     "actions send";
   column-gap: 14px;
   row-gap: 10px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: 22px;
+  background: rgba(255, 252, 247, 0.96);
+  border: 1px solid rgba(114, 89, 53, 0.12);
+  border-radius: 24px;
   padding: 12px 14px 12px;
   transition: all var(--duration-base) var(--ease-out-expo);
 }
@@ -1253,12 +1313,12 @@
 
 @media (max-width: 1100px) {
   .layout {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 250px minmax(0, 1fr);
   }
   
   .chatColumn,
   .composerColumn {
-    padding: 0 14px;
+    padding: 0 18px;
   }
 }
 
@@ -1281,6 +1341,10 @@
     max-height: 40vh;
     border-right: none;
     border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .sessionMenuButton {
+    opacity: 1;
   }
   
   .sidebar::before {
@@ -1335,6 +1399,15 @@
   
   .chatScroll {
     padding: 18px 14px;
+  }
+
+  .projectButton {
+    padding-left: 8px;
+  }
+
+  .sessionList {
+    margin-left: 18px;
+    padding-left: 12px;
   }
   
   .composerDock {
