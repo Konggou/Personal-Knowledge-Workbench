@@ -89,8 +89,19 @@ class GroundedGenerationService:
             )
         except RuntimeError as exc:
             logger.warning("Grounded answer generation failed: %s", exc)
-            grounded = self._build_grounded_failure_answer(query=query, evidences=evidences)
-        return self._build_answer_payload(grounded=grounded, research_mode=research_mode, evidences=evidences)
+            grounded = self._recover_grounded_answer(
+                history=history,
+                query=query,
+                evidences=evidences,
+                research_mode=research_mode,
+                context_notes=context_notes,
+                evidence_mode=evidence_mode,
+            )
+        return self._build_answer_payload(
+            grounded=grounded,
+            research_mode=research_mode,
+            evidences=evidences,
+        )
 
     def stream_generate_answer(
         self,
@@ -133,10 +144,21 @@ class GroundedGenerationService:
                     "evidence_status": "grounded",
                 }
             else:
-                grounded = self._build_grounded_failure_answer(query=query, evidences=evidences)
+                grounded = self._recover_grounded_answer(
+                    history=history,
+                    query=query,
+                    evidences=evidences,
+                    research_mode=research_mode,
+                    context_notes=context_notes,
+                    evidence_mode=evidence_mode,
+                )
                 for chunk in self._chunk_text(grounded["answer_md"]):
                     yield chunk
-        return self._build_answer_payload(grounded=grounded, research_mode=research_mode, evidences=evidences)
+        return self._build_answer_payload(
+            grounded=grounded,
+            research_mode=research_mode,
+            evidences=evidences,
+        )
 
     def prepare_agent_evidence(
         self,
@@ -681,7 +703,13 @@ class GroundedGenerationService:
 
         return False
 
-    def _build_answer_payload(self, *, grounded: dict, research_mode: bool, evidences: list[dict]) -> dict:
+    def _build_answer_payload(
+        self,
+        *,
+        grounded: dict,
+        research_mode: bool,
+        evidences: list[dict],
+    ) -> dict:
         return {
             "title": "\u8c03\u7814\u7ed3\u8bba" if research_mode else None,
             "answer_md": grounded["answer_md"].strip(),
@@ -707,6 +735,30 @@ class GroundedGenerationService:
         normalized = answer_md.rstrip()
         separator = "\n\n" if normalized else ""
         return f"{normalized}{separator}{GROUNDING_STREAM_INTERRUPTED_NOTE}".strip()
+
+    def _recover_grounded_answer(
+        self,
+        *,
+        history: list[dict],
+        query: str,
+        evidences: list[dict],
+        research_mode: bool,
+        context_notes: list[str] | None,
+        evidence_mode: str,
+    ) -> dict:
+        try:
+            recovered = self.llm.generate_grounded_reply_fallback(
+                conversation=history,
+                evidence_pack=evidences,
+                research_mode=research_mode,
+                context_notes=context_notes,
+                evidence_mode=evidence_mode,
+            )
+        except RuntimeError as fallback_exc:
+            logger.warning("Grounded fallback generation failed: %s", fallback_exc)
+            return self._build_grounded_failure_answer(query=query, evidences=evidences)
+        recovered["recovered_from_generation_failure"] = True
+        return recovered
 
     def _build_disclosure_note(self, grounded: dict, *, evidences: list[dict]) -> str | None:
         notes: list[str] = []

@@ -170,6 +170,34 @@ class LLMService:
         )
         return self.parse_grounded_reply(raw_text)
 
+    def generate_grounded_reply_fallback(
+        self,
+        *,
+        conversation: list[dict],
+        evidence_pack: list[dict],
+        research_mode: bool = False,
+        context_notes: list[str] | None = None,
+        evidence_mode: str = "project",
+    ) -> dict:
+        if not self.is_configured():
+            raise RuntimeError("LLM is not configured.")
+        messages = self._build_grounded_fallback_messages(
+            conversation=conversation,
+            evidence_pack=evidence_pack,
+            research_mode=research_mode,
+            context_notes=context_notes,
+            evidence_mode=evidence_mode,
+        )
+        raw_text = self._complete_messages(
+            messages=messages,
+            temperature=0.2,
+            max_tokens=self._grounded_completion_budget(
+                conversation=conversation,
+                research_mode=research_mode,
+            ),
+        )
+        return self.parse_grounded_reply(raw_text)
+
     def generate_hypothetical_passage(self, *, query: str, research_mode: bool = False) -> str:
         if not self.is_configured():
             return ""
@@ -498,6 +526,35 @@ class LLMService:
             {"role": "system", "content": "你是一个中文优先的 grounded RAG 助手。"},
             *prior_history,
             {"role": "user", "content": grounded_prompt},
+        ]
+
+    def _build_grounded_fallback_messages(
+        self,
+        *,
+        conversation: list[dict],
+        evidence_pack: list[dict],
+        research_mode: bool,
+        context_notes: list[str] | None,
+        evidence_mode: str = "project",
+    ) -> list[dict]:
+        messages = self._build_grounded_messages(
+            conversation=conversation,
+            evidence_pack=evidence_pack,
+            research_mode=research_mode,
+            context_notes=context_notes,
+            evidence_mode=evidence_mode,
+        )
+        fallback_prompt = (
+            messages[-1]["content"]
+            + "\n\nIf strict JSON is unstable, reply with plain markdown only."
+            " Do not output JSON, code fences, or extra explanation about formatting."
+            " Keep the answer grounded in the provided evidence."
+            " If the evidence is still insufficient, say so briefly in markdown."
+        )
+        return [
+            messages[0],
+            *messages[1:-1],
+            {"role": "user", "content": fallback_prompt},
         ]
 
     def _build_hyde_messages(self, *, query: str, research_mode: bool) -> list[dict]:
