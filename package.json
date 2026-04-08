@@ -3,11 +3,15 @@
   "private": true,
   "packageManager": "pnpm@10.32.1",
   "scripts": {
+    "dev": "node scripts/dev.mjs",
     "dev:web": "corepack pnpm --dir apps/web dev",
     "build:web": "corepack pnpm --dir apps/web build",
     "typecheck:web": "corepack pnpm --dir apps/web typecheck",
     "test:web": "corepack pnpm --dir apps/web test",
     "test:e2e": "corepack pnpm --dir apps/web test:e2e",
-    "skills:sync": "powershell -ExecutionPolicy Bypass -File ./scripts/sync-codex-skills.ps1"
+    "skills:sync": "node scripts/sync-skills.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
   }
 }
