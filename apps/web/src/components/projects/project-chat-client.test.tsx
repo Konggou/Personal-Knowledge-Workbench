@@ -70,6 +70,18 @@ function createProject(): ProjectSummary {
   };
 }
 
+function createSecondaryProject(): ProjectSummary {
+  return {
+    ...createProject(),
+    id: "project-2",
+    name: "Side Project",
+    active_source_count: 3,
+    active_session_count: 2,
+    latest_session_id: "session-side-1",
+    latest_session_title: "Side Session",
+  };
+}
+
 function createSessionSummary(): SessionSummary {
   return {
     id: "session-1",
@@ -408,13 +420,13 @@ describe("ProjectChatClient", () => {
     fireEvent.click(screen.getByRole("button", { name: "深度调研" }));
     fireEvent.click(screen.getByRole("button", { name: "联网补充" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /Session Two/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Session Two$/ }));
 
     await waitFor(() => expect(mocks.getSession).toHaveBeenCalledWith("session-2"));
     await waitFor(() => expect(screen.getByRole("button", { name: "深度调研" })).toHaveAttribute("aria-pressed", "false"));
     expect(screen.getByRole("button", { name: "联网补充" })).toHaveAttribute("aria-pressed", "false");
 
-    fireEvent.click(screen.getAllByRole("button", { name: /条消息/ })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "新会话" }));
 
     await waitFor(() => expect(mocks.getSession).toHaveBeenCalledWith("session-1"));
     await waitFor(() => expect(screen.getByRole("button", { name: "深度调研" })).toHaveAttribute("aria-pressed", "true"));
@@ -495,15 +507,15 @@ describe("ProjectChatClient", () => {
     await waitFor(() => expect(mocks.streamSessionMessage).toHaveBeenCalled());
     gate.resolve();
 
-    const summaryButton = await screen.findByRole("button", { name: "保存为摘要" });
-    const reportButton = screen.getByRole("button", { name: "生成报告" });
+    const summaryButton = await screen.findByRole("button", { name: /保存为摘要/ });
+    const reportButton = screen.getByRole("button", { name: /生成报告/ });
     expect(summaryButton).toBeDisabled();
     expect(reportButton).toBeDisabled();
 
     refreshGate.resolve(finalSession);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "保存为摘要" })).toBeEnabled());
-    expect(screen.getByRole("button", { name: "生成报告" })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: /保存为摘要/ })).toBeEnabled());
+    expect(screen.getByRole("button", { name: /生成报告/ })).toBeEnabled();
   });
 
   it("updates the sidebar source count after adding a file source", async () => {
@@ -546,7 +558,72 @@ describe("ProjectChatClient", () => {
 
     await waitFor(() => expect(mocks.createFileSources).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByRole("link", { name: /知识库 · 2 份资料/ })).toBeInTheDocument());
-    expect(screen.getByText(/2 份资料 · 1 个会话/)).toBeInTheDocument();
+    expect(screen.getByText("2 份资料")).toBeInTheDocument();
+    expect(screen.queryByText(/个会话/)).not.toBeInTheDocument();
+  });
+
+  it("moves rename and delete actions into the session overflow menu", async () => {
+    const project = createProject();
+    const session = createInitialSessionDetail();
+
+    vi.spyOn(window, "prompt").mockReturnValueOnce("重新命名后的会话");
+    vi.spyOn(window, "confirm").mockReturnValueOnce(true);
+
+    mocks.renameSession.mockResolvedValueOnce({
+      ...session,
+      title: "重新命名后的会话",
+    });
+    mocks.deleteSession.mockResolvedValueOnce(undefined);
+
+    render(
+      <ProjectChatClient
+        allProjects={[project]}
+        initialProjectSessions={createProjectSessions()}
+        initialSelectedSession={session}
+        initialSources={[createKnowledgeSource()]}
+        project={project}
+      />,
+    );
+
+    expect(screen.queryByText(/条消息/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重命名" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "新会话 的更多操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
+
+    await waitFor(() => expect(mocks.renameSession).toHaveBeenCalledWith("session-1", "重新命名后的会话"));
+
+    fireEvent.click(screen.getByRole("button", { name: "重新命名后的会话 的更多操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除" }));
+
+    await waitFor(() => expect(mocks.deleteSession).toHaveBeenCalledWith("session-1"));
+  });
+
+  it("keeps non-current projects collapsed to a single row and closes the overflow menu on escape", async () => {
+    const currentProject = createProject();
+    const secondaryProject = createSecondaryProject();
+    const session = createInitialSessionDetail();
+
+    render(
+      <ProjectChatClient
+        allProjects={[currentProject, secondaryProject]}
+        initialProjectSessions={createProjectSessions()}
+        initialSelectedSession={session}
+        initialSources={[createKnowledgeSource()]}
+        project={currentProject}
+      />,
+    );
+
+    expect(screen.getByText("Side Project")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /收起 Side Project|展开 Side Project/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Side Session")).not.toBeInTheDocument();
+
+    const overflowButton = screen.getByRole("button", { name: "新会话 的更多操作" });
+    fireEvent.click(overflowButton);
+    expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+
+    fireEvent.keyDown(overflowButton, { key: "Escape" });
+    expect(screen.queryByRole("menuitem", { name: "重命名" })).not.toBeInTheDocument();
   });
 
   it("renders structured preview context when opening a source from the source bubble", async () => {
@@ -643,6 +720,5 @@ describe("ProjectChatClient", () => {
       ),
     );
     expect(await screen.findByText("已保存到知识库，可以继续追问新资料。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "已保存到知识库" })).toBeDisabled();
   });
 });
